@@ -1,57 +1,21 @@
 # ============================================================
 # Playwright Tests — PUBLIC REPO B (Free unlimited minutes)
 # ============================================================
+# Repo B (public):  Syslatech/test-runner-EXT
+# Repo A (private): Syslatech/Lp-EXT-Web
+#
 # This workflow lives in PUBLIC Repo B.
-# It checks out test code from PRIVATE Repo A via a deploy key.
-# All secrets (env vars + deploy key) are stored in Repo B.
+# It checks out test code from PRIVATE Repo A via CHECKOUT_PAT.
+# All secrets are stored in Repo B.
 #
-# REQUIRED SECRETS in Repo B (Settings → Secrets → Actions):
-#
-#   Deploy key (bridge to private Repo A)
-#   --------------------------------------
-#   DEPLOY_KEY            — Private SSH key (read-only access to Repo A)
-#
-#   App / Auth
-#   ----------
-#   STG_URL               — Quick Pricer base URL
-#   STG2_URL              — Loan Pricer base URL
-#   ENCOMPASS_URL         — Encompass URL
-#   ID                    — App ID
-#   USER_ID               — User login
-#   PASSWORD              — User password
-#   API_URL               — API base URL
-#   CLIENT_ID             — OAuth client ID
-#   CLIENT_SECRET         — OAuth client secret
-#   INSTANCE_ID           — Instance identifier
-#
-#   Email notifications
-#   -------------------
-#   EMAIL_USER            — Gmail address to send from
-#   EMAIL_PASS            — Gmail app password
-#   EMAIL_TO              — Recipient email address(es)
-#
-# HOW TO RUN
-# ──────────────────────────────────────────────────────
-#   1. Go to Repo B → Actions → Playwright Tests → Run workflow
-#   2. Enter the branch name from Repo A you want to test
-#   3. Pick a suite from the test_suite dropdown (default: all)
-#   4. Toggle retries on or off (default: on)
-#   5. Optionally set grep or spec for finer control
-#
-# SUITE OPTIONS
-# ──────────────────────────────────────────────────────
-#   all           → Full regression (both projects, all tests)
-#   loan-pricer   → Loan Pricer + Unassigned/Inprogress_Done_Testcases
-#   quick-pricer  → Quick Pricer suite
-#   unassigned    → Unassigned suite only
-#
-# MINUTES
-# ──────────────────────────────────────────────────────
-#   This workflow runs on a PUBLIC repo → UNLIMITED free minutes
-#   ubuntu-latest = 1x multiplier, no cost ever
+# REQUIRED SECRETS in Repo B:
+#   CHECKOUT_PAT  — Fine-grained PAT with read access to Lp-EXT-Web
+#   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
+#   API_URL, CLIENT_ID, CLIENT_SECRET, INSTANCE_ID
+#   EMAIL_USER, EMAIL_PASS, EMAIL_TO
 # ============================================================
 
-name: Playwright Tests — Public Runner
+name: Playwright Tests -EXT WEB PORTAL
 
 permissions:
   contents: write
@@ -62,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch in Repo A to test'
+        description: 'Branch in Repo A (Lp-EXT-Web) to test'
         required: false
-        default: 'main'
+        default: 'master'
         type: string
       test_suite:
         description: 'Test suite to run'
@@ -104,32 +68,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Set up SSH deploy key (to access private Repo A) ──────────────
-      - name: Set up SSH deploy key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
-
-      # ── 2. Checkout PRIVATE Repo A code via deploy key ───────────────────
-      - name: Checkout private test repository (Repo A)
+      # ── 1. Checkout PRIVATE Repo A (Lp-EXT-Web) via PAT ─────────────────
+      - name: Checkout private test repository (Lp-EXT-Web)
         uses: actions/checkout@v4
         with:
-          repository: YOUR_ORG/YOUR_PRIVATE_REPO_A   # ← CHANGE THIS
-          ref: ${{ github.event.inputs.branch || 'main' }}
-          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          repository: Syslatech/Lp-EXT-Web
+          ref: ${{ github.event.inputs.branch || 'master' }}
+          token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
-      # ── 3. Node.js setup with npm cache ──────────────────────────────────
+      # ── 2. Node.js setup with npm cache ──────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
           cache: 'npm'
 
-      # ── 4. Install project dependencies ──────────────────────────────────
+      # ── 3. Install project dependencies ──────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
-      # ── 5. Cache Playwright browsers ─────────────────────────────────────
+      # ── 4. Cache Playwright browsers ─────────────────────────────────────
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         id: playwright-cache
@@ -139,21 +97,21 @@ jobs:
           restore-keys: |
             playwright-chromium-
 
-      # ── 6. Install Playwright browsers (cache miss) ───────────────────────
+      # ── 5. Install Playwright browsers (cache miss) ───────────────────────
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium --with-deps
 
-      # ── 6b. Install OS deps only (cache hit) ─────────────────────────────
+      # ── 5b. Install OS deps only (cache hit) ─────────────────────────────
       - name: Install browser OS deps only
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      # ── 7. Prepare run metadata ───────────────────────────────────────────
+      # ── 6. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
         run: |
-          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
           RETRIES="${{ github.event.inputs.retries }}"
 
@@ -171,7 +129,7 @@ jobs:
           echo "| Runner | \`Public Repo B — unlimited minutes\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 8. Run tests ──────────────────────────────────────────────────────
+      # ── 7. Run tests ──────────────────────────────────────────────────────
       - name: Run Playwright tests
         env:
           USE_CI_ENV: 'true'
@@ -241,12 +199,12 @@ jobs:
           echo "Running: ${CMD[*]}"
           "${CMD[@]}"
 
-      # ── 9. Generate ZIP report ────────────────────────────────────────────
+      # ── 8. Generate ZIP report ────────────────────────────────────────────
       - name: Generate report ZIP
         if: always()
         run: node reports/generate-report.js
 
-      # ── 10. Upload artifacts (kept 1 day) ─────────────────────────────────
+      # ── 9. Upload artifacts (kept 1 day) ──────────────────────────────────
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -259,15 +217,14 @@ jobs:
             reports/html-reports-zip/
           retention-days: 1
 
-      # ── 11. Stage Pages deployment folder ────────────────────────────────
+      # ── 10. Stage Pages deployment folder ────────────────────────────────
       - name: Stage Pages deployment
         if: always()
         run: |
-          OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.repository }}"
-          REPO_NAME="${REPO#*/}"
+          OWNER="Syslatech"
+          REPO="test-runner-EXT"
           RUN="${{ github.run_number }}"
-          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
 
@@ -278,9 +235,6 @@ jobs:
           ZIP_FILE=$(ls reports/html-reports-zip/*.zip 2>/dev/null | sort | tail -1)
           if [ -n "$ZIP_FILE" ]; then
             cp "$ZIP_FILE" "$PAGES_DIR/report.zip"
-            ZIP_NAME=$(basename "$ZIP_FILE")
-          else
-            ZIP_NAME=""
           fi
 
           cat > "$PAGES_DIR/index.html" << HTMLEOF
@@ -315,8 +269,7 @@ jobs:
               .btn {
                 display: flex; align-items: center; gap: .75rem;
                 padding: .875rem 1.25rem; border-radius: 8px; text-decoration: none;
-                font-size: .95rem; font-weight: 600;
-                transition: transform .1s, box-shadow .1s;
+                font-size: .95rem; font-weight: 600; transition: transform .1s, box-shadow .1s;
               }
               .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.15); }
               .btn-primary { background: #1a73e8; color: #fff; }
@@ -332,7 +285,7 @@ jobs:
                 <div>Repo A Branch: <span>${BRANCH}</span></div>
                 <div>Suite: <span>${SUITE}</span></div>
                 <div>Date: <span>${DATE}</span></div>
-                <div>Runner: <span>Public Repo B &mdash; Free</span></div>
+                <div>Runner: <span>Public Repo B &mdash; Free unlimited minutes</span></div>
               </div>
               <div class="actions">
                 <a class="btn btn-primary" href="./report/" target="_blank">
@@ -343,8 +296,12 @@ jobs:
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   Download ZIP Report
                 </a>
+                <a class="btn btn-secondary" href="https://syslatech.github.io/test-runner-EXT/reports.html">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  All Reports
+                </a>
               </div>
-              <div class="footer">Ext Web Portal &bull; GitHub Actions (Public Runner)</div>
+              <div class="footer">Syslatech &bull; Ext Web Portal &bull; GitHub Actions</div>
             </div>
           </body>
           </html>
@@ -352,7 +309,7 @@ jobs:
 
           sed -i 's/^          //' "$PAGES_DIR/index.html"
 
-      # ── 12. Deploy report to GitHub Pages (Repo B) ───────────────────────
+      # ── 11. Deploy report to GitHub Pages ─────────────────────────────────
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v3
@@ -362,15 +319,12 @@ jobs:
           destination_dir: reports/${{ github.run_number }}
           keep_files: true
 
-      # ── 13. Post report URL to Job Summary ───────────────────────────────
+      # ── 12. Post report URL to Job Summary ────────────────────────────────
       - name: Post report link to Job Summary
         if: always()
         run: |
-          REPO="${{ github.repository }}"
-          OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${REPO#*/}"
           RUN="${{ github.run_number }}"
-          PAGES_URL="https://${OWNER}.github.io/${REPO_NAME}/reports/${RUN}/"
+          PAGES_URL="https://syslatech.github.io/test-runner-EXT/reports/${RUN}/"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Test Report" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -379,11 +333,11 @@ jobs:
           echo "| Landing page | [Open]($PAGES_URL) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| View report | [Open Report](${PAGES_URL}report/) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Download ZIP | [Download](${PAGES_URL}report.zip) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| All reports | [Dashboard](https://syslatech.github.io/test-runner-EXT/reports.html) |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "> **Report URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "> **Runner:** Public Repo B — Unlimited free minutes" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 14. Send email notification (uncomment to enable) ────────────────
+      # ── 13. Send email notification (uncomment to enable) ─────────────────
       # - name: Send email notification
       #   if: always()
       #   env:
