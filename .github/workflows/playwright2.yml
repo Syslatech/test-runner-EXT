@@ -70,7 +70,7 @@ jobs:
         with:
           repository: Syslatech/Lp-EXT-Web
           ref: ${{ github.event.inputs.branch || 'master' }}
-          token: ${{ secrets.CHECKOUT_PAT }}
+          token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
       # ── 2. Node.js setup with npm cache ──────────────────────────────────
       - name: Setup Node.js
@@ -202,6 +202,7 @@ jobs:
       # ── 8. Generate ZIP report ────────────────────────────────────────────
       - name: Generate report ZIP
         if: always()
+        continue-on-error: true
         run: node reports/generate-report.js
 
       # ── 9. Upload artifacts (kept 1 day) ──────────────────────────────────
