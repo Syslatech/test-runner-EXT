@@ -5,7 +5,7 @@
 # Repo A (private): Syslatech/Lp-EXT-Web
 #
 # REQUIRED SECRETS in Repo B:
-#   CHECKOUT_PAT  — Fine-grained PAT with read access to Lp-EXT-Web
+#   CHECKOUT_PAT_EXT — Fine-grained PAT with read access to Lp-EXT-Web
 #   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
 #   API_URL, CLIENT_ID, CLIENT_SECRET, INSTANCE_ID
 #   EMAIL_USER, EMAIL_PASS, EMAIL_TO
@@ -70,7 +70,7 @@ jobs:
         with:
           repository: Syslatech/Lp-EXT-Web
           ref: ${{ github.event.inputs.branch || 'master' }}
-          token: ${{ secrets.CHECKOUT_PAT }}
+          token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
       # ── 2. Node.js setup with npm cache ──────────────────────────────────
       - name: Setup Node.js
@@ -93,11 +93,11 @@ jobs:
           restore-keys: |
             playwright-chromium-
 
-      # ── 5. Install Playwright browsers + deps in one shot ─────────────────
+      # ── 5. Install Playwright browsers + deps ─────────────────────────────
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-        timeout-minutes: 8
+        timeout-minutes: 15
 
       # ── 6. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
@@ -200,6 +200,7 @@ jobs:
       # ── 9. Upload artifacts (kept 1 day) ──────────────────────────────────
       - name: Upload test artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-report-${{ steps.meta.outputs.safe_branch }}-${{ github.event.inputs.test_suite }}-run${{ github.run_number }}
@@ -214,8 +215,6 @@ jobs:
       - name: Stage Pages deployment
         if: always()
         run: |
-          OWNER="Syslatech"
-          REPO="test-runner-EXT"
           RUN="${{ github.run_number }}"
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
@@ -223,8 +222,15 @@ jobs:
 
           PAGES_DIR="pages-deploy"
           mkdir -p "$PAGES_DIR/report"
-          cp -r playwright-report/. "$PAGES_DIR/report/"
 
+          # Copy report if it exists
+          if [ -d "playwright-report" ]; then
+            cp -r playwright-report/. "$PAGES_DIR/report/"
+          else
+            echo "<html><body><h2>No report generated — tests did not run.</h2></body></html>" > "$PAGES_DIR/report/index.html"
+          fi
+
+          # Copy ZIP if it exists
           ZIP_FILE=$(ls reports/html-reports-zip/*.zip 2>/dev/null | sort | tail -1)
           if [ -n "$ZIP_FILE" ]; then
             cp "$ZIP_FILE" "$PAGES_DIR/report.zip"
