@@ -57,6 +57,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     name: '${{ github.event.inputs.branch }} — ${{ github.event.inputs.test_suite }}'
@@ -78,6 +81,7 @@ jobs:
         with:
           node-version: lts/*
           cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       # ── 3. Install project dependencies ──────────────────────────────────
       - name: Install dependencies
@@ -89,15 +93,20 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            playwright-chromium-
+            playwright-${{ runner.os }}-chromium-
 
       # ── 5. Install Playwright browsers + deps ─────────────────────────────
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
         timeout-minutes: 15
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+        timeout-minutes: 5
 
       # ── 6. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
@@ -311,7 +320,7 @@ jobs:
       # ── 11. Deploy report to GitHub Pages ─────────────────────────────────
       - name: Deploy report to GitHub Pages
         if: always()
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./pages-deploy
