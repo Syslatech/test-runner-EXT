@@ -4,10 +4,6 @@
 # Repo B (public):  Syslatech/test-runner-EXT
 # Repo A (private): Syslatech/Lp-EXT-Web
 #
-# This workflow lives in PUBLIC Repo B.
-# It checks out test code from PRIVATE Repo A via CHECKOUT_PAT.
-# All secrets are stored in Repo B.
-#
 # REQUIRED SECRETS in Repo B:
 #   CHECKOUT_PAT  — Fine-grained PAT with read access to Lp-EXT-Web
 #   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
@@ -74,7 +70,7 @@ jobs:
         with:
           repository: Syslatech/Lp-EXT-Web
           ref: ${{ github.event.inputs.branch || 'master' }}
-          token: ${{ secrets.CHECKOUT_PAT_EXT }}
+          token: ${{ secrets.CHECKOUT_PAT }}
 
       # ── 2. Node.js setup with npm cache ──────────────────────────────────
       - name: Setup Node.js
@@ -100,12 +96,16 @@ jobs:
       # ── 5. Install Playwright browsers (cache miss) ───────────────────────
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium --with-deps
+        run: |
+          npx playwright install chromium
+          npx playwright install-deps chromium
+        timeout-minutes: 10
 
       # ── 5b. Install OS deps only (cache hit) ─────────────────────────────
       - name: Install browser OS deps only
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
+        continue-on-error: true
 
       # ── 6. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
