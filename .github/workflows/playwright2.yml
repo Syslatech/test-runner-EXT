@@ -54,7 +54,7 @@ on:
       retries:
         description: 'Retry failed tests (1 retry when on)'
         required: false
-        default: 'on'
+        default: 'off'
         type: choice
         options:
           - 'on'
@@ -80,8 +80,6 @@ jobs:
     name: '${{ github.event.inputs.branch }} — ${{ github.event.inputs.test_suite }}'
     timeout-minutes: 120
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.52.0-jammy
 
     steps:
       # ── 1. Checkout PRIVATE Repo A (Lp-EXT-Web) via PAT ─────────────────
@@ -102,11 +100,34 @@ jobs:
 
       # ── 3. Install project dependencies ──────────────────────────────────
       - name: Install dependencies
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
         run: npm ci
 
-      # ── 4. Prepare run metadata ──────────────────────────────────────────
+      # ── 4. Cache Playwright browsers ─────────────────────────────────────
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-chromium-
+
+      # ── 5. Install Playwright browsers (only on cache miss) ───────────────
+      - name: Install Playwright browsers (full install)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: npx playwright install chromium --with-deps
+
+      # ── 5b. Install OS deps only (cache hit — skip browser download) ──────
+      - name: Install browser OS deps only (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: sudo npx playwright install-deps chromium
+
+      # ── 6. Prepare run metadata ──────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
         shell: bash
