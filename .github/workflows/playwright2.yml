@@ -113,15 +113,26 @@ jobs:
             playwright-${{ runner.os }}-chromium-
 
       # ── 5. Install Playwright browsers (only on cache miss) ───────────────
+      #   NOTE: --with-deps is intentionally NOT used here — it triggers a
+      #   full apt-get run that hangs silently on GitHub-hosted runners.
+      #   OS deps are installed separately in step 5b (always runs, ~10s).
       - name: Install Playwright browsers (full install)
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: npx playwright install chromium --with-deps
+        timeout-minutes: 10
+        run: npx playwright install chromium
 
-      # ── 5b. Install OS deps only (cache hit — skip browser download) ──────
-      - name: Install browser OS deps only (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+      # ── 5b. Save browser cache after fresh install ───────────────────────
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
+
+      # ── 5c. Install browser OS deps (always runs — fast ~10s) ────────────
+      #   Runs on both cache-hit and cache-miss runs.
+      #   Separated from browser install to avoid apt-get hang.
+      - name: Install browser OS deps
         timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
