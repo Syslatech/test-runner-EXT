@@ -1,0 +1,394 @@
+# ============================================================
+# Playwright Tests — PUBLIC REPO B (Free unlimited minutes)
+# ============================================================
+# This workflow lives in PUBLIC Repo B.
+# It checks out test code from PRIVATE Repo A via a deploy key.
+# All secrets (env vars + deploy key) are stored in Repo B.
+#
+# REQUIRED SECRETS in Repo B (Settings → Secrets → Actions):
+#
+#   Deploy key (bridge to private Repo A)
+#   --------------------------------------
+#   DEPLOY_KEY            — Private SSH key (read-only access to Repo A)
+#
+#   App / Auth
+#   ----------
+#   STG_URL               — Quick Pricer base URL
+#   STG2_URL              — Loan Pricer base URL
+#   ENCOMPASS_URL         — Encompass URL
+#   ID                    — App ID
+#   USER_ID               — User login
+#   PASSWORD              — User password
+#   API_URL               — API base URL
+#   CLIENT_ID             — OAuth client ID
+#   CLIENT_SECRET         — OAuth client secret
+#   INSTANCE_ID           — Instance identifier
+#
+#   Email notifications
+#   -------------------
+#   EMAIL_USER            — Gmail address to send from
+#   EMAIL_PASS            — Gmail app password
+#   EMAIL_TO              — Recipient email address(es)
+#
+# HOW TO RUN
+# ──────────────────────────────────────────────────────
+#   1. Go to Repo B → Actions → Playwright Tests → Run workflow
+#   2. Enter the branch name from Repo A you want to test
+#   3. Pick a suite from the test_suite dropdown (default: all)
+#   4. Toggle retries on or off (default: on)
+#   5. Optionally set grep or spec for finer control
+#
+# SUITE OPTIONS
+# ──────────────────────────────────────────────────────
+#   all           → Full regression (both projects, all tests)
+#   loan-pricer   → Loan Pricer + Unassigned/Inprogress_Done_Testcases
+#   quick-pricer  → Quick Pricer suite
+#   unassigned    → Unassigned suite only
+#
+# MINUTES
+# ──────────────────────────────────────────────────────
+#   This workflow runs on a PUBLIC repo → UNLIMITED free minutes
+#   ubuntu-latest = 1x multiplier, no cost ever
+# ============================================================
+
+name: Playwright Tests — Public Runner
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch in Repo A to test'
+        required: false
+        default: 'main'
+        type: string
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - loan-pricer
+          - quick-pricer
+          - unassigned
+      retries:
+        description: 'Retry failed tests (1 retry when on)'
+        required: false
+        default: 'on'
+        type: choice
+        options:
+          - 'on'
+          - 'off'
+      grep:
+        description: 'TC filter — single: TC01 | multiple: TC01|TC05 | keyword: smoke'
+        required: false
+        default: ''
+      spec:
+        description: 'Specific spec file — overrides test_suite if set'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: '${{ github.event.inputs.branch }} — ${{ github.event.inputs.test_suite }}'
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Set up SSH deploy key (to access private Repo A) ──────────────
+      - name: Set up SSH deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      # ── 2. Checkout PRIVATE Repo A code via deploy key ───────────────────
+      - name: Checkout private test repository (Repo A)
+        uses: actions/checkout@v4
+        with:
+          repository: YOUR_ORG/YOUR_PRIVATE_REPO_A   # ← CHANGE THIS
+          ref: ${{ github.event.inputs.branch || 'main' }}
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      # ── 3. Node.js setup with npm cache ──────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      # ── 4. Install project dependencies ──────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 5. Cache Playwright browsers ─────────────────────────────────────
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-chromium-
+
+      # ── 6. Install Playwright browsers (cache miss) ───────────────────────
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium --with-deps
+
+      # ── 6b. Install OS deps only (cache hit) ─────────────────────────────
+      - name: Install browser OS deps only
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # ── 7. Prepare run metadata ───────────────────────────────────────────
+      - name: Prepare run metadata
+        id: meta
+        run: |
+          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          SUITE="${{ github.event.inputs.test_suite }}"
+          RETRIES="${{ github.event.inputs.retries }}"
+
+          SAFE_BRANCH=$(echo "$BRANCH" | tr '/\\:*?"<>|' '-')
+          echo "safe_branch=$SAFE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "run_date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+          echo "## Test Run Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Repo A Branch | \`$BRANCH\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | \`$SUITE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Retries | \`$RETRIES\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runner | \`Public Repo B — unlimited minutes\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 8. Run tests ──────────────────────────────────────────────────────
+      - name: Run Playwright tests
+        env:
+          USE_CI_ENV: 'true'
+          STG_URL:        ${{ secrets.STG_URL }}
+          STG2_URL:       ${{ secrets.STG2_URL }}
+          ENCOMPASS_URL:  ${{ secrets.ENCOMPASS_URL }}
+          ID:             ${{ secrets.ID }}
+          USER_ID:        ${{ secrets.USER_ID }}
+          PASSWORD:       ${{ secrets.PASSWORD }}
+          API_URL:        ${{ secrets.API_URL }}
+          CLIENT_ID:      ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET:  ${{ secrets.CLIENT_SECRET }}
+          INSTANCE_ID:    ${{ secrets.INSTANCE_ID }}
+          EMAIL_USER:     ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS:     ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO:       ${{ secrets.EMAIL_TO }}
+        run: |
+          SUITE="${{ github.event.inputs.test_suite }}"
+          GREP="${{ github.event.inputs.grep }}"
+          SPEC="${{ github.event.inputs.spec }}"
+          RETRIES="${{ github.event.inputs.retries }}"
+
+          SPEC="${SPEC//\\//}"
+
+          if [[ "$RETRIES" == "on" ]]; then
+            RETRY_FLAG="--retries=1"
+          else
+            RETRY_FLAG="--retries=0"
+          fi
+
+          declare -a CMD
+
+          if [[ -n "$SPEC" ]]; then
+            CMD=(npx playwright test "$SPEC" "$RETRY_FLAG")
+          else
+            case "$SUITE" in
+              "loan-pricer")
+                CMD=(npx playwright test --project='Loan pricer'
+                  "tests/ext-web/LoanPricer"
+                  "tests/ext-web/unassigned/Inprogress_Done_Testcases"
+                  "$RETRY_FLAG"
+                )
+                ;;
+              "quick-pricer")
+                CMD=(npx playwright test --project='Quick Pricer'
+                  "tests/ext-web/QuickPricer/quick-pricer-module"
+                  "tests/ext-web/QuickPricer/quick-pricerinternal"
+                  "$RETRY_FLAG"
+                )
+                ;;
+              "unassigned")
+                CMD=(npx playwright test --project='Loan pricer'
+                  "tests/ext-web/unassigned"
+                  "$RETRY_FLAG"
+                )
+                ;;
+              *)
+                CMD=(npx playwright test "$RETRY_FLAG")
+                ;;
+            esac
+          fi
+
+          if [[ -n "$GREP" ]]; then
+            CMD+=(--grep "$GREP")
+          fi
+
+          echo "Running: ${CMD[*]}"
+          "${CMD[@]}"
+
+      # ── 9. Generate ZIP report ────────────────────────────────────────────
+      - name: Generate report ZIP
+        if: always()
+        run: node reports/generate-report.js
+
+      # ── 10. Upload artifacts (kept 1 day) ─────────────────────────────────
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ steps.meta.outputs.safe_branch }}-${{ github.event.inputs.test_suite }}-run${{ github.run_number }}
+          path: |
+            playwright-report/
+            test-results/
+            logs/
+            reports/html-reports-zip/
+          retention-days: 1
+
+      # ── 11. Stage Pages deployment folder ────────────────────────────────
+      - name: Stage Pages deployment
+        if: always()
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.repository }}"
+          REPO_NAME="${REPO#*/}"
+          RUN="${{ github.run_number }}"
+          BRANCH="${{ github.event.inputs.branch || 'main' }}"
+          SUITE="${{ github.event.inputs.test_suite }}"
+          DATE=$(date '+%Y-%m-%d %H:%M UTC')
+
+          PAGES_DIR="pages-deploy"
+          mkdir -p "$PAGES_DIR/report"
+          cp -r playwright-report/. "$PAGES_DIR/report/"
+
+          ZIP_FILE=$(ls reports/html-reports-zip/*.zip 2>/dev/null | sort | tail -1)
+          if [ -n "$ZIP_FILE" ]; then
+            cp "$ZIP_FILE" "$PAGES_DIR/report.zip"
+            ZIP_NAME=$(basename "$ZIP_FILE")
+          else
+            ZIP_NAME=""
+          fi
+
+          cat > "$PAGES_DIR/index.html" << HTMLEOF
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Test Report — Run #${RUN}</title>
+            <style>
+              *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                background: #f0f2f5; min-height: 100vh;
+                display: flex; align-items: center; justify-content: center; padding: 2rem;
+              }
+              .card {
+                background: #fff; border-radius: 12px;
+                box-shadow: 0 4px 24px rgba(0,0,0,.10);
+                max-width: 520px; width: 100%; padding: 2.5rem 2rem;
+              }
+              .badge {
+                display: inline-block; background: #e8f0fe; color: #1a73e8;
+                font-size: .75rem; font-weight: 600; letter-spacing: .04em;
+                padding: .25rem .75rem; border-radius: 999px; margin-bottom: 1rem;
+                text-transform: uppercase;
+              }
+              h1 { font-size: 1.5rem; color: #1a202c; margin-bottom: .5rem; }
+              .meta { font-size: .85rem; color: #718096; margin-bottom: 2rem; line-height: 1.6; }
+              .meta span { font-weight: 600; color: #4a5568; }
+              .actions { display: flex; flex-direction: column; gap: .875rem; }
+              .btn {
+                display: flex; align-items: center; gap: .75rem;
+                padding: .875rem 1.25rem; border-radius: 8px; text-decoration: none;
+                font-size: .95rem; font-weight: 600;
+                transition: transform .1s, box-shadow .1s;
+              }
+              .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+              .btn-primary { background: #1a73e8; color: #fff; }
+              .btn-secondary { background: #f7fafc; color: #2d3748; border: 1.5px solid #e2e8f0; }
+              .footer { margin-top: 2rem; font-size: .78rem; color: #a0aec0; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="badge">Playwright Tests</div>
+              <h1>Test Report &mdash; Run #${RUN}</h1>
+              <div class="meta">
+                <div>Repo A Branch: <span>${BRANCH}</span></div>
+                <div>Suite: <span>${SUITE}</span></div>
+                <div>Date: <span>${DATE}</span></div>
+                <div>Runner: <span>Public Repo B &mdash; Free</span></div>
+              </div>
+              <div class="actions">
+                <a class="btn btn-primary" href="./report/" target="_blank">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  View Test Report
+                </a>
+                <a class="btn btn-secondary" href="./report.zip" download>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download ZIP Report
+                </a>
+              </div>
+              <div class="footer">Ext Web Portal &bull; GitHub Actions (Public Runner)</div>
+            </div>
+          </body>
+          </html>
+          HTMLEOF
+
+          sed -i 's/^          //' "$PAGES_DIR/index.html"
+
+      # ── 12. Deploy report to GitHub Pages (Repo B) ───────────────────────
+      - name: Deploy report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./pages-deploy
+          destination_dir: reports/${{ github.run_number }}
+          keep_files: true
+
+      # ── 13. Post report URL to Job Summary ───────────────────────────────
+      - name: Post report link to Job Summary
+        if: always()
+        run: |
+          REPO="${{ github.repository }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${REPO#*/}"
+          RUN="${{ github.run_number }}"
+          PAGES_URL="https://${OWNER}.github.io/${REPO_NAME}/reports/${RUN}/"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Test Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Option | Link |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Landing page | [Open]($PAGES_URL) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| View report | [Open Report](${PAGES_URL}report/) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Download ZIP | [Download](${PAGES_URL}report.zip) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **Report URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **Runner:** Public Repo B — Unlimited free minutes" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 14. Send email notification (uncomment to enable) ────────────────
+      # - name: Send email notification
+      #   if: always()
+      #   env:
+      #     EMAIL_USER:      ${{ secrets.EMAIL_USER }}
+      #     EMAIL_PASS:      ${{ secrets.EMAIL_PASS }}
+      #     EMAIL_TO:        ${{ secrets.EMAIL_TO }}
+      #     AUTO_SEND_EMAIL: 'true'
+      #   run: node reports/send-email.js
