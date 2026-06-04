@@ -115,11 +115,17 @@ jobs:
       # ── 5. Install Playwright browsers (only on cache miss) ───────────────
       - name: Install Playwright browsers (full install)
         if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: npx playwright install chromium --with-deps
 
       # ── 5b. Install OS deps only (cache hit — skip browser download) ──────
       - name: Install browser OS deps only (cache hit)
         if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: sudo npx playwright install-deps chromium
 
       # ── 6. Prepare run metadata ───────────────────────────────────────────
