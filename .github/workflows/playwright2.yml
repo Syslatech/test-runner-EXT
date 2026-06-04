@@ -82,6 +82,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ── 0. Free up disk space on runner ──────────────────────────────────
+      #   GitHub runners ship with dotnet, Android SDK, Haskell, CodeQL etc.
+      #   pre-installed — these consume 15–20 GB and cause silent hangs when
+      #   Playwright tries to extract its 170 MB zip into a nearly-full disk.
+      - name: Free disk space
+        run: |
+          echo "=== Disk BEFORE cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af || true
+          echo "=== Disk AFTER cleanup ==="
+          df -h
+
       # ── 1. Checkout PRIVATE Repo A (Lp-EXT-Web) via PAT ─────────────────
       - name: Checkout repository (Lp-EXT-Web)
         uses: actions/checkout@v4
