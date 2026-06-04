@@ -70,7 +70,7 @@ jobs:
         with:
           repository: Syslatech/Lp-EXT-Web
           ref: ${{ github.event.inputs.branch || 'master' }}
-          token: ${{ secrets.CHECKOUT_PAT }}
+          token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
       # ── 2. Node.js setup with npm cache ──────────────────────────────────
       - name: Setup Node.js
