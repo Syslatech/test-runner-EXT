@@ -4,11 +4,10 @@
 # Repo B (public):  Syslatech/test-runner-EXT
 # Repo A (private): Syslatech/Lp-EXT-Web
 #
-# REQUIRED SECRETS in Repo B:
-#   CHECKOUT_PAT_EXT — PAT with Contents:Read on Syslatech/Lp-EXT-Web
-#   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
-#   API_URL, CLIENT_ID, CLIENT_SECRET, INSTANCE_ID
-#   EMAIL_USER, EMAIL_PASS, EMAIL_TO
+# WHY THIS IS RELIABLE:
+#   Uses SYSTEM Google Chrome already installed on GitHub runners
+#   No download needed — Chrome is always there from day 1
+#   Zero browser install time — goes straight to running tests
 # ============================================================
 
 name: Playwright Tests -EXT WEB PORTAL
@@ -57,9 +56,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   test:
     name: '${{ github.event.inputs.branch }} — ${{ github.event.inputs.test_suite }}'
@@ -87,70 +83,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # ── 4. Cache Playwright browsers ─────────────────────────────────────
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-chromium-
-
-      # ── 5a. Install Chromium OS deps via apt (cache miss only) ────────────
-      #        Done separately so each step has its own timeout
+      # ── 4. Verify system Chrome is available ──────────────────────────────
+      #   GitHub ubuntu-latest runners always have Google Chrome pre-installed
+      #   This step just confirms it and shows the version
       # ─────────────────────────────────────────────────────────────────────
-      - name: Install Chromium OS dependencies
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 5
+      - name: Verify system Chrome
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-            libnss3 \
-            libnspr4 \
-            libatk1.0-0t64 \
-            libatk-bridge2.0-0t64 \
-            libcups2t64 \
-            libdrm2 \
-            libxkbcommon0 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxfixes3 \
-            libxrandr2 \
-            libgbm1 \
-            libasound2t64 \
-            libpango-1.0-0 \
-            libcairo2 \
-            libatspi2.0-0t64 \
-            libx11-6 \
-            libx11-xcb1 \
-            libxcb1 \
-            libxext6 \
-            libxss1 \
-            fonts-liberation \
-            xvfb
+          google-chrome --version
+          which google-chrome
+          echo "Chrome is ready — no download needed!"
 
-      # ── 5b. Download Chromium browser only (cache miss only) ──────────────
-      #        No --with-deps flag — deps already installed above
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Download Chromium browser
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
-
-      # ── 5c. Install OS deps only on cache hit (skip download) ─────────────
-      - name: Install OS deps (cache hit — skip download)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        timeout-minutes: 5
-        continue-on-error: true
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-            libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 \
-            libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 \
-            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
-            libpango-1.0-0 libcairo2 libatspi2.0-0t64 xvfb
-
-      # ── 6. Prepare run metadata ───────────────────────────────────────────
+      # ── 5. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
         run: |
@@ -172,10 +115,11 @@ jobs:
           echo "| Runner | \`Public Repo B — unlimited minutes\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 7. Run Playwright tests ───────────────────────────────────────────
+      # ── 6. Run Playwright tests using system Chrome ───────────────────────
       - name: Run Playwright tests
         env:
           USE_CI_ENV: 'true'
+          PLAYWRIGHT_BROWSERS_PATH: '0'
           STG_URL:        ${{ secrets.STG_URL }}
           STG2_URL:       ${{ secrets.STG2_URL }}
           ENCOMPASS_URL:  ${{ secrets.ENCOMPASS_URL }}
@@ -242,13 +186,13 @@ jobs:
           echo "Running: ${CMD[*]}"
           "${CMD[@]}"
 
-      # ── 8. Generate ZIP report ────────────────────────────────────────────
+      # ── 7. Generate ZIP report ────────────────────────────────────────────
       - name: Generate report ZIP
         if: always()
         continue-on-error: true
         run: node reports/generate-report.js
 
-      # ── 9. Upload artifacts (kept 1 day) ──────────────────────────────────
+      # ── 8. Upload artifacts (kept 1 day) ──────────────────────────────────
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
@@ -262,7 +206,7 @@ jobs:
             reports/html-reports-zip/
           retention-days: 1
 
-      # ── 10. Stage Pages deployment ────────────────────────────────────────
+      # ── 9. Stage Pages deployment ─────────────────────────────────────────
       - name: Stage Pages deployment
         if: always()
         run: |
@@ -280,7 +224,7 @@ jobs:
           if [ -d "playwright-report" ]; then
             cp -r playwright-report/. "$PAGES_DIR/report/"
           else
-            echo "<html><body><h2>No report generated — tests did not run.</h2></body></html>" > "$PAGES_DIR/report/index.html"
+            echo "<html><body><h2>No report generated.</h2></body></html>" > "$PAGES_DIR/report/index.html"
           fi
 
           ZIP_FILE=$(ls reports/html-reports-zip/*.zip 2>/dev/null | sort | tail -1)
@@ -319,7 +263,7 @@ jobs:
                 <div>Branch: <span>${BRANCH}</span></div>
                 <div>Suite: <span>${SUITE}</span></div>
                 <div>Date: <span>${DATE}</span></div>
-                <div>Runner: <span>Public Repo B &mdash; Free unlimited minutes</span></div>
+                <div>Runner: <span>System Chrome &mdash; No install needed</span></div>
               </div>
               <div class="actions">
                 <a class="btn btn-primary" href="./report/" target="_blank">
@@ -328,7 +272,7 @@ jobs:
                 </a>
                 <a class="btn btn-secondary" href="./report.zip" download>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Download ZIP Report
+                  Download ZIP
                 </a>
                 <a class="btn btn-secondary" href="https://${OWNER}.github.io/${REPO_NAME}/reports.html">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
@@ -343,7 +287,7 @@ jobs:
 
           sed -i 's/^          //' "$PAGES_DIR/index.html"
 
-      # ── 11. Deploy to GitHub Pages ─────────────────────────────────────────
+      # ── 10. Deploy to GitHub Pages ─────────────────────────────────────────
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
@@ -353,7 +297,7 @@ jobs:
           destination_dir: reports/${{ github.run_number }}
           keep_files: true
 
-      # ── 12. Post report URL to Job Summary ────────────────────────────────
+      # ── 11. Post report URL to Job Summary ────────────────────────────────
       - name: Post report link to Job Summary
         if: always()
         run: |
@@ -374,7 +318,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "> **Report URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 13. Send email notification (uncomment to enable) ─────────────────
+      # ── 12. Send email notification (uncomment to enable) ─────────────────
       # - name: Send email notification
       #   if: always()
       #   env:
