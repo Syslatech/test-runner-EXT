@@ -135,7 +135,6 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       - name: Download Chromium browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 10
         run: npx playwright install chromium
 
       # ── 5c. Install OS deps only on cache hit (skip download) ─────────────
@@ -377,7 +376,7 @@ jobs:
 
       # ── 13. Send email notification (uncomment to enable) ─────────────────
       # - name: Send email notification
-      #   if: failure()
+      #   if: always()
       #   env:
       #     EMAIL_USER:      ${{ secrets.EMAIL_USER }}
       #     EMAIL_PASS:      ${{ secrets.EMAIL_PASS }}
