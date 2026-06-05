@@ -46,50 +46,40 @@ jobs:
           echo "expiry_date=$EXPIRY_DATE" >> "$GITHUB_OUTPUT"
           echo "PAT expiry date: $EXPIRY_DATE"
 
-      # ── 3. Build dist folder with injected secrets ───────────────────────
+      # ── 3. Inject secrets into TestRunner.html ───────────────────────────
       - name: Inject secrets into TestRunner.html
         env:
           TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
           EXPIRY_DATE: ${{ steps.expiry.outputs.expiry_date }}
         run: |
-          mkdir -p dist
+          # Use rsync to copy everything except .git into publish/
+          mkdir -p publish
+          rsync -a --exclude='.git' --exclude='publish' . publish/
 
-          # Copy each file/folder individually to avoid cp-into-itself error
-          for item in *; do
-            if [ "$item" != "dist" ]; then
-              cp -r "$item" dist/
-            fi
-          done
-
-          # Copy hidden files except .git
-          for item in .[!.]*; do
-            if [ "$item" != ".git" ] && [ -e "$item" ]; then
-              cp -r "$item" dist/
-            fi
-          done
-
-          # Inject PAT and expiry date into TestRunner.html
+          # Inject PAT and expiry date
           sed -i \
             -e "s|__TRIGGER_PAT__|${TRIGGER_PAT}|g" \
             -e "s|__EXPIRY_DATE__|${EXPIRY_DATE}|g" \
-            dist/TestRunner.html
+            publish/TestRunner.html
 
           echo "Injected PAT and expiry ($EXPIRY_DATE) into TestRunner.html"
 
-          # Verify injection (without showing token)
-          grep -q "EXPIRY_DATE = '20" dist/TestRunner.html && \
+          # Verify (without showing token)
+          grep -q "EXPIRY_DATE = '20" publish/TestRunner.html && \
             echo "✅ Expiry date injected successfully" || \
             echo "⚠️ Injection check failed"
 
-      # ── 4. Deploy dist to GitHub Pages ──────────────────────────────────
+          ls -la publish/
+
+      # ── 4. Deploy publish/ to GitHub Pages ──────────────────────────────
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          publish_dir: ./publish
           publish_branch: gh-pages
           keep_files: false
-          exclude_assets: '.github,dist,.git'
+          exclude_assets: '.github'
 
       # ── 5. Summary ───────────────────────────────────────────────────────
       - name: Post deploy summary
