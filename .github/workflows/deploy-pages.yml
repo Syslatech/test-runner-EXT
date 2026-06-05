@@ -52,6 +52,11 @@ jobs:
           TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
           EXPIRY_DATE: ${{ steps.expiry.outputs.expiry_date }}
         run: |
+          if [ -z "$TRIGGER_PAT" ]; then
+            echo "❌ TRIGGER_PAT secret is empty or not set — aborting deployment"
+            exit 1
+          fi
+
           # Use rsync to copy everything except .git into publish/
           mkdir -p publish
           rsync -a --exclude='.git' --exclude='publish' . publish/
@@ -64,10 +69,18 @@ jobs:
 
           echo "Injected PAT and expiry ($EXPIRY_DATE) into TestRunner.html"
 
-          # Verify (without showing token)
+          # Verify expiry date was injected
           grep -q "EXPIRY_DATE = '20" publish/TestRunner.html && \
             echo "✅ Expiry date injected successfully" || \
-            echo "⚠️ Injection check failed"
+            echo "⚠️ Expiry injection check failed"
+
+          # Verify token placeholder was replaced (fail if still present)
+          if grep -q "__TRIGGER_PAT__" publish/TestRunner.html; then
+            echo "❌ Token injection failed — placeholder still present in TestRunner.html"
+            exit 1
+          else
+            echo "✅ Token injected successfully"
+          fi
 
           ls -la publish/
 
