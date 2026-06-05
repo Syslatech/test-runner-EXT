@@ -4,10 +4,13 @@
 # Repo B (public):  Syslatech/test-runner-EXT
 # Repo A (private): Syslatech/Lp-EXT-Web
 #
-# WHY THIS IS RELIABLE:
-#   Uses SYSTEM Google Chrome already installed on GitHub runners
-#   No download needed — Chrome is always there from day 1
-#   Zero browser install time — goes straight to running tests
+# PRE-REQUISITE: Run seed-cache.yml ONCE before using this
+#
+# REQUIRED SECRETS in Repo B:
+#   CHECKOUT_PAT_EXT — PAT with Contents:Read on Lp-EXT-Web
+#   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
+#   API_URL, CLIENT_ID, CLIENT_SECRET, INSTANCE_ID
+#   EMAIL_USER, EMAIL_PASS, EMAIL_TO
 # ============================================================
 
 name: Playwright Tests -EXT WEB PORTAL
@@ -83,28 +86,57 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # ── 4. Verify system Chrome is available ──────────────────────────────
-      #   GitHub ubuntu-latest runners always have Google Chrome pre-installed
-      #   This step just confirms it and shows the version
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Verify system Chrome
-        run: |
-          google-chrome --version
-          which google-chrome
-          echo "Chrome is ready — no download needed!"
+      # ── 4. Restore Playwright browser cache ───────────────────────────────
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-chromium-
 
-      # ── 5. Prepare run metadata ───────────────────────────────────────────
+      # ── 5. Install browser if cache miss ──────────────────────────────────
+      - name: Install Playwright browser (cache miss only)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+            libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0t64 xvfb
+          npx playwright install chromium
+
+      # ── 6. Install OS deps (cache hit — browser already cached) ──────────
+      - name: Install OS deps only (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+            libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0t64 xvfb
+
+      # ── 7. Save cache after install ───────────────────────────────────────
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
+
+      # ── 8. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
         run: |
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
           RETRIES="${{ github.event.inputs.retries }}"
-
           SAFE_BRANCH=$(echo "$BRANCH" | tr '/\\:*?"<>|' '-')
           echo "safe_branch=$SAFE_BRANCH" >> "$GITHUB_OUTPUT"
           echo "run_date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
-
           echo "## Test Run Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
@@ -115,11 +147,10 @@ jobs:
           echo "| Runner | \`Public Repo B — unlimited minutes\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 6. Run Playwright tests using system Chrome ───────────────────────
+      # ── 9. Run Playwright tests ───────────────────────────────────────────
       - name: Run Playwright tests
         env:
           USE_CI_ENV: 'true'
-          PLAYWRIGHT_BROWSERS_PATH: '0'
           STG_URL:        ${{ secrets.STG_URL }}
           STG2_URL:       ${{ secrets.STG2_URL }}
           ENCOMPASS_URL:  ${{ secrets.ENCOMPASS_URL }}
@@ -138,17 +169,13 @@ jobs:
           GREP="${{ github.event.inputs.grep }}"
           SPEC="${{ github.event.inputs.spec }}"
           RETRIES="${{ github.event.inputs.retries }}"
-
           SPEC="${SPEC//\\//}"
-
           if [[ "$RETRIES" == "on" ]]; then
             RETRY_FLAG="--retries=1"
           else
             RETRY_FLAG="--retries=0"
           fi
-
           declare -a CMD
-
           if [[ -n "$SPEC" ]]; then
             CMD=(npx playwright test "$SPEC" "$RETRY_FLAG")
           else
@@ -157,42 +184,37 @@ jobs:
                 CMD=(npx playwright test --project='Loan pricer'
                   "tests/ext-web/LoanPricer"
                   "tests/ext-web/unassigned/Inprogress_Done_Testcases"
-                  "$RETRY_FLAG"
-                )
+                  "$RETRY_FLAG")
                 ;;
               "quick-pricer")
                 CMD=(npx playwright test --project='Quick Pricer'
                   "tests/ext-web/QuickPricer/quick-pricer-module"
                   "tests/ext-web/QuickPricer/quick-pricerinternal"
-                  "$RETRY_FLAG"
-                )
+                  "$RETRY_FLAG")
                 ;;
               "unassigned")
                 CMD=(npx playwright test --project='Loan pricer'
                   "tests/ext-web/unassigned"
-                  "$RETRY_FLAG"
-                )
+                  "$RETRY_FLAG")
                 ;;
               *)
                 CMD=(npx playwright test "$RETRY_FLAG")
                 ;;
             esac
           fi
-
           if [[ -n "$GREP" ]]; then
             CMD+=(--grep "$GREP")
           fi
-
           echo "Running: ${CMD[*]}"
           "${CMD[@]}"
 
-      # ── 7. Generate ZIP report ────────────────────────────────────────────
+      # ── 10. Generate ZIP report ───────────────────────────────────────────
       - name: Generate report ZIP
         if: always()
         continue-on-error: true
         run: node reports/generate-report.js
 
-      # ── 8. Upload artifacts (kept 1 day) ──────────────────────────────────
+      # ── 11. Upload artifacts ──────────────────────────────────────────────
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
@@ -206,7 +228,7 @@ jobs:
             reports/html-reports-zip/
           retention-days: 1
 
-      # ── 9. Stage Pages deployment ─────────────────────────────────────────
+      # ── 12. Stage Pages deployment ────────────────────────────────────────
       - name: Stage Pages deployment
         if: always()
         run: |
@@ -217,21 +239,17 @@ jobs:
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
-
           PAGES_DIR="pages-deploy"
           mkdir -p "$PAGES_DIR/report"
-
           if [ -d "playwright-report" ]; then
             cp -r playwright-report/. "$PAGES_DIR/report/"
           else
             echo "<html><body><h2>No report generated.</h2></body></html>" > "$PAGES_DIR/report/index.html"
           fi
-
           ZIP_FILE=$(ls reports/html-reports-zip/*.zip 2>/dev/null | sort | tail -1)
           if [ -n "$ZIP_FILE" ]; then
             cp "$ZIP_FILE" "$PAGES_DIR/report.zip"
           fi
-
           cat > "$PAGES_DIR/index.html" << HTMLEOF
           <!DOCTYPE html>
           <html lang="en">
@@ -243,7 +261,7 @@ jobs:
               *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
               body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f2f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
               .card{background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.10);max-width:520px;width:100%;padding:2.5rem 2rem}
-              .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;font-size:.75rem;font-weight:600;letter-spacing:.04em;padding:.25rem .75rem;border-radius:999px;margin-bottom:1rem;text-transform:uppercase}
+              .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;font-size:.75rem;font-weight:600;padding:.25rem .75rem;border-radius:999px;margin-bottom:1rem;text-transform:uppercase}
               h1{font-size:1.5rem;color:#1a202c;margin-bottom:.5rem}
               .meta{font-size:.85rem;color:#718096;margin-bottom:2rem;line-height:1.6}
               .meta span{font-weight:600;color:#4a5568}
@@ -263,7 +281,6 @@ jobs:
                 <div>Branch: <span>${BRANCH}</span></div>
                 <div>Suite: <span>${SUITE}</span></div>
                 <div>Date: <span>${DATE}</span></div>
-                <div>Runner: <span>System Chrome &mdash; No install needed</span></div>
               </div>
               <div class="actions">
                 <a class="btn btn-primary" href="./report/" target="_blank">
@@ -284,10 +301,9 @@ jobs:
           </body>
           </html>
           HTMLEOF
-
           sed -i 's/^          //' "$PAGES_DIR/index.html"
 
-      # ── 10. Deploy to GitHub Pages ─────────────────────────────────────────
+      # ── 13. Deploy to GitHub Pages ─────────────────────────────────────────
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
@@ -297,7 +313,7 @@ jobs:
           destination_dir: reports/${{ github.run_number }}
           keep_files: true
 
-      # ── 11. Post report URL to Job Summary ────────────────────────────────
+      # ── 14. Post report URL to Job Summary ────────────────────────────────
       - name: Post report link to Job Summary
         if: always()
         run: |
@@ -315,15 +331,3 @@ jobs:
           echo "| View report | [Open Report](${PAGES_URL}report/) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Download ZIP | [Download](${PAGES_URL}report.zip) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| All reports | [Dashboard](https://${OWNER}.github.io/${REPO_NAME}/reports.html) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> **Report URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
-
-      # ── 12. Send email notification (uncomment to enable) ─────────────────
-      # - name: Send email notification
-      #   if: always()
-      #   env:
-      #     EMAIL_USER:      ${{ secrets.EMAIL_USER }}
-      #     EMAIL_PASS:      ${{ secrets.EMAIL_PASS }}
-      #     EMAIL_TO:        ${{ secrets.EMAIL_TO }}
-      #     AUTO_SEND_EMAIL: 'true'
-      #   run: node reports/send-email.js
