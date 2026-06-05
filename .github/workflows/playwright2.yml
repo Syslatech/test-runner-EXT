@@ -98,6 +98,7 @@ jobs:
       # ── 4. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
+        shell: bash
         run: |
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
@@ -117,6 +118,7 @@ jobs:
 
       # ── 5. Run Playwright tests ───────────────────────────────────────────
       - name: Run Playwright tests
+        shell: bash
         env:
           USE_CI_ENV: 'true'
           HOME: /root
@@ -181,6 +183,7 @@ jobs:
       - name: Generate report ZIP
         if: always()
         continue-on-error: true
+        shell: bash
         run: node reports/generate-report.js
 
       # ── 7. Upload artifacts ───────────────────────────────────────────────
@@ -200,6 +203,7 @@ jobs:
       # ── 8. Stage Pages deployment ─────────────────────────────────────────
       - name: Stage Pages deployment
         if: always()
+        shell: bash
         run: |
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.repository }}"
@@ -286,6 +290,7 @@ jobs:
       # ── 10. Post report URL to Job Summary ────────────────────────────────
       - name: Post report link to Job Summary
         if: always()
+        shell: bash
         run: |
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.repository }}"
