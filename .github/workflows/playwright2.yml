@@ -4,8 +4,8 @@
 # Repo B (public):  Syslatech/test-runner-EXT
 # Repo A (private): Syslatech/Lp-EXT-Web
 #
-# USES DOCKER — Chrome pre-installed, zero download time
-# Docker image version EXACTLY matches package.json v1.58.2
+# AUTO-DETECTS Playwright version from package-lock.json
+# Pulls matching Docker image automatically — no version mismatch ever
 #
 # REQUIRED SECRETS in Repo B:
 #   CHECKOUT_PAT_EXT — PAT with Contents:Read on Lp-EXT-Web
@@ -61,21 +61,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Job 1: Detect Playwright version from Repo A ─────────────────────────
+  detect-version:
+    runs-on: ubuntu-latest
+    outputs:
+      pw_version: ${{ steps.get-version.outputs.pw_version }}
+      docker_image: ${{ steps.get-version.outputs.docker_image }}
+    steps:
+      - name: Checkout Repo A to read package-lock.json
+        uses: actions/checkout@v4
+        with:
+          repository: Syslatech/Lp-EXT-Web
+          ref: ${{ github.event.inputs.branch || 'master' }}
+          token: ${{ secrets.CHECKOUT_PAT_EXT }}
+
+      - name: Detect Playwright version
+        id: get-version
+        run: |
+          PW_VERSION=$(node -e "
+            const lock = require('./package-lock.json');
+            const pkg = lock.packages?.['node_modules/@playwright/test'] 
+                     || lock.packages?.['node_modules/playwright']
+                     || Object.values(lock.dependencies || {}).find((_, k) => k === '@playwright/test');
+            console.log(pkg?.version || '');
+          ")
+          
+          if [ -z "$PW_VERSION" ]; then
+            # Fallback: read from package.json
+            PW_VERSION=$(node -e "
+              const p = require('./package.json');
+              const v = p.dependencies?.['@playwright/test'] 
+                     || p.devDependencies?.['@playwright/test'] 
+                     || '';
+              console.log(v.replace(/[\^~>=<]/g,'').trim());
+            ")
+          fi
+
+          echo "Detected Playwright version: $PW_VERSION"
+          echo "pw_version=$PW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "docker_image=mcr.microsoft.com/playwright:v${PW_VERSION}-noble" >> "$GITHUB_OUTPUT"
+
+  # ── Job 2: Run tests using matching Docker image ──────────────────────────
   test:
+    needs: detect-version
     name: '${{ github.event.inputs.branch }} — ${{ github.event.inputs.test_suite }}'
     timeout-minutes: 120
     runs-on: ubuntu-latest
-
-    # ── Docker container with Playwright + Chrome pre-installed ──────────
-    # Version v1.58.2 exactly matches package.json @playwright/test ^1.58.2
-    # No browser download needed — ever
-    # ─────────────────────────────────────────────────────────────────────
     container:
-      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      image: ${{ needs.detect-version.outputs.docker_image }}
       options: --user root
 
     steps:
-      # ── 1. Checkout PRIVATE Repo A using PAT ─────────────────────────────
+      # ── 1. Checkout PRIVATE Repo A using PAT ───────────────────────────
       - name: Checkout private test repository (Lp-EXT-Web)
         uses: actions/checkout@v4
         with:
@@ -83,7 +120,7 @@ jobs:
           ref: ${{ github.event.inputs.branch || 'master' }}
           token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
-      # ── 2. Node.js setup ──────────────────────────────────────────────────
+      # ── 2. Node.js setup ────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -91,11 +128,19 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      # ── 3. Install project dependencies ──────────────────────────────────
+      # ── 3. Install dependencies ─────────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
-      # ── 4. Prepare run metadata ───────────────────────────────────────────
+      # ── 4. Show versions for debugging ──────────────────────────────────
+      - name: Show versions
+        shell: bash
+        run: |
+          echo "Docker image: ${{ needs.detect-version.outputs.docker_image }}"
+          echo "Playwright version: ${{ needs.detect-version.outputs.pw_version }}"
+          npx playwright --version
+
+      # ── 5. Prepare run metadata ──────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
         shell: bash
@@ -113,10 +158,11 @@ jobs:
           echo "| Repo A Branch | \`$BRANCH\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Suite | \`$SUITE\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Retries | \`$RETRIES\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Runner | \`Docker — Chrome pre-installed\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| PW Version | \`${{ needs.detect-version.outputs.pw_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker Image | \`${{ needs.detect-version.outputs.docker_image }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 5. Run Playwright tests ───────────────────────────────────────────
+      # ── 6. Run Playwright tests ──────────────────────────────────────────
       - name: Run Playwright tests
         shell: bash
         env:
@@ -179,14 +225,14 @@ jobs:
           echo "Running: ${CMD[*]}"
           "${CMD[@]}"
 
-      # ── 6. Generate ZIP report ────────────────────────────────────────────
+      # ── 7. Generate ZIP report ───────────────────────────────────────────
       - name: Generate report ZIP
         if: always()
         continue-on-error: true
         shell: bash
         run: node reports/generate-report.js
 
-      # ── 7. Upload artifacts ───────────────────────────────────────────────
+      # ── 8. Upload artifacts ──────────────────────────────────────────────
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
@@ -200,7 +246,7 @@ jobs:
             reports/html-reports-zip/
           retention-days: 1
 
-      # ── 8. Stage Pages deployment ─────────────────────────────────────────
+      # ── 9. Stage Pages deployment ────────────────────────────────────────
       - name: Stage Pages deployment
         if: always()
         shell: bash
@@ -212,6 +258,7 @@ jobs:
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
+          PW_VER="${{ needs.detect-version.outputs.pw_version }}"
           PAGES_DIR="pages-deploy"
           mkdir -p "$PAGES_DIR/report"
           if [ -d "playwright-report" ]; then
@@ -254,7 +301,7 @@ jobs:
                 <div>Branch: <span>${BRANCH}</span></div>
                 <div>Suite: <span>${SUITE}</span></div>
                 <div>Date: <span>${DATE}</span></div>
-                <div>Runner: <span>Docker v1.58.2 &mdash; Chrome pre-installed</span></div>
+                <div>Playwright: <span>v${PW_VER}</span></div>
               </div>
               <div class="actions">
                 <a class="btn btn-primary" href="./report/" target="_blank">
@@ -277,7 +324,7 @@ jobs:
           HTMLEOF
           sed -i 's/^          //' "$PAGES_DIR/index.html"
 
-      # ── 9. Deploy to GitHub Pages ──────────────────────────────────────────
+      # ── 10. Deploy to GitHub Pages ───────────────────────────────────────
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
@@ -287,7 +334,7 @@ jobs:
           destination_dir: reports/${{ github.run_number }}
           keep_files: true
 
-      # ── 10. Post report URL to Job Summary ────────────────────────────────
+      # ── 11. Post report URL to Job Summary ──────────────────────────────
       - name: Post report link to Job Summary
         if: always()
         shell: bash
@@ -309,7 +356,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "> **Report URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 11. Send email notification (uncomment to enable) ─────────────────
+      # ── 12. Send email notification (uncomment to enable) ─────────────────
       # - name: Send email notification
       #   if: always()
       #   env:
