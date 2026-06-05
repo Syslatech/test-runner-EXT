@@ -5,25 +5,10 @@
 # Repo A (private): Syslatech/Lp-EXT-Web
 #
 # REQUIRED SECRETS in Repo B:
-#   CHECKOUT_PAT_EXT — Fine-grained PAT with read access to Lp-EXT-Web
+#   CHECKOUT_PAT_EXT — PAT with Contents:Read on Syslatech/Lp-EXT-Web
 #   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
 #   API_URL, CLIENT_ID, CLIENT_SECRET, INSTANCE_ID
 #   EMAIL_USER, EMAIL_PASS, EMAIL_TO
-#
-# HOW TO RUN
-# ──────────────────────────────────────────────────────
-#   1. Go to Actions → Playwright Tests → Run workflow
-#   2. Pick the Repo A branch to test (default: master)
-#   3. Pick a suite from the test_suite dropdown (default: all)
-#   4. Toggle retries on or off (default: on — 1 retry per failed test)
-#   5. Optionally set grep or spec for finer control
-#
-# SUITE OPTIONS
-# ──────────────────────────────────────────────────────
-#   all           → Full regression (both projects, all tests)
-#   loan-pricer   → Loan Pricer + Unassigned/Inprogress_Done_Testcases
-#   quick-pricer  → Quick Pricer suite
-#   unassigned    → Unassigned suite only
 # ============================================================
 
 name: Playwright Tests -EXT WEB PORTAL
@@ -54,13 +39,13 @@ on:
       retries:
         description: 'Retry failed tests (1 retry when on)'
         required: false
-        default: 'off'
+        default: 'on'
         type: choice
         options:
           - 'on'
           - 'off'
       grep:
-        description: 'TC filter — single: TC01 | multiple: TC01|TC05|TC12 | keyword: smoke  (optional, regex)'
+        description: 'TC filter — single: TC01 | multiple: TC01|TC05|TC12 | keyword: smoke'
         required: false
         default: ''
       spec:
@@ -82,31 +67,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 0. Free up disk space on runner ──────────────────────────────────
-      #   GitHub runners ship with dotnet, Android SDK, Haskell, CodeQL etc.
-      #   pre-installed — these consume 15–20 GB and cause silent hangs when
-      #   Playwright tries to extract its 170 MB zip into a nearly-full disk.
-      - name: Free disk space
-        run: |
-          echo "=== Disk BEFORE cleanup ==="
-          df -h
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune -af || true
-          echo "=== Disk AFTER cleanup ==="
-          df -h
-
-      # ── 1. Checkout PRIVATE Repo A (Lp-EXT-Web) via PAT ─────────────────
-      - name: Checkout repository (Lp-EXT-Web)
+      # ── 1. Checkout PRIVATE Repo A using PAT ─────────────────────────────
+      - name: Checkout private test repository (Lp-EXT-Web)
         uses: actions/checkout@v4
         with:
           repository: Syslatech/Lp-EXT-Web
           ref: ${{ github.event.inputs.branch || 'master' }}
           token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
-      # ── 2. Node.js setup with npm cache ──────────────────────────────────
+      # ── 2. Node.js setup ──────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -128,36 +97,63 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-chromium-
 
-      # ── 5. Install Playwright browsers (only on cache miss) ───────────────
-      #   NOTE: --with-deps is intentionally NOT used here — it triggers a
-      #   full apt-get run that hangs silently on GitHub-hosted runners.
-      #   OS deps are installed separately in step 5b (always runs, ~10s).
-      - name: Install Playwright browsers (full install)
+      # ── 5a. Install Chromium OS deps via apt (cache miss only) ────────────
+      #        Done separately so each step has its own timeout
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Install Chromium OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libnss3 \
+            libnspr4 \
+            libatk1.0-0t64 \
+            libatk-bridge2.0-0t64 \
+            libcups2t64 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libasound2t64 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libatspi2.0-0t64 \
+            libx11-6 \
+            libx11-xcb1 \
+            libxcb1 \
+            libxext6 \
+            libxss1 \
+            fonts-liberation \
+            xvfb
+
+      # ── 5b. Download Chromium browser only (cache miss only) ──────────────
+      #        No --with-deps flag — deps already installed above
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Download Chromium browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         timeout-minutes: 10
         run: npx playwright install chromium
 
-      # ── 5b. Save browser cache after fresh install ───────────────────────
-      - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
-
-      # ── 5c. Install browser OS deps (always runs — fast ~10s) ────────────
-      #   Runs on both cache-hit and cache-miss runs.
-      #   Separated from browser install to avoid apt-get hang.
-      - name: Install browser OS deps
+      # ── 5c. Install OS deps only on cache hit (skip download) ─────────────
+      - name: Install OS deps (cache hit — skip download)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
         timeout-minutes: 5
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: sudo npx playwright install-deps chromium
+        continue-on-error: true
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+            libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64 \
+            libpango-1.0-0 libcairo2 libatspi2.0-0t64 xvfb
 
-      # ── 6. Prepare run metadata ──────────────────────────────────────────
+      # ── 6. Prepare run metadata ───────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
-        shell: bash
         run: |
           BRANCH="${{ github.event.inputs.branch || 'master' }}"
           SUITE="${{ github.event.inputs.test_suite }}"
@@ -171,15 +167,14 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Branch | \`$BRANCH\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Repo A Branch | \`$BRANCH\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Suite | \`$SUITE\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Retries | \`$RETRIES\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Trigger | \`workflow_dispatch\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runner | \`Public Repo B — unlimited minutes\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 7. Run tests ──────────────────────────────────────────────────────
+      # ── 7. Run Playwright tests ───────────────────────────────────────────
       - name: Run Playwright tests
-        shell: bash
         env:
           USE_CI_ENV: 'true'
           STG_URL:        ${{ secrets.STG_URL }}
@@ -248,14 +243,16 @@ jobs:
           echo "Running: ${CMD[*]}"
           "${CMD[@]}"
 
-      # ── 8. Generate ZIP report (always runs even on failure) ──────────────
+      # ── 8. Generate ZIP report ────────────────────────────────────────────
       - name: Generate report ZIP
         if: always()
+        continue-on-error: true
         run: node reports/generate-report.js
 
-      # ── 9. Upload artifacts — kept for 1 day ─────────────────────────────
+      # ── 9. Upload artifacts (kept 1 day) ──────────────────────────────────
       - name: Upload test artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-report-${{ steps.meta.outputs.safe_branch }}-${{ github.event.inputs.test_suite }}-run${{ github.run_number }}
@@ -266,10 +263,9 @@ jobs:
             reports/html-reports-zip/
           retention-days: 1
 
-      # ── 10. Stage Pages deployment folder ────────────────────────────────
+      # ── 10. Stage Pages deployment ────────────────────────────────────────
       - name: Stage Pages deployment
         if: always()
-        shell: bash
         run: |
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.repository }}"
@@ -297,60 +293,23 @@ jobs:
           <!DOCTYPE html>
           <html lang="en">
           <head>
-            <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <meta charset="UTF-8"/>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
             <title>Test Report — Run #${RUN}</title>
             <style>
-              *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                background: #f0f2f5;
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 2rem;
-              }
-              .card {
-                background: #fff;
-                border-radius: 12px;
-                box-shadow: 0 4px 24px rgba(0,0,0,.10);
-                max-width: 520px;
-                width: 100%;
-                padding: 2.5rem 2rem;
-              }
-              .badge {
-                display: inline-block;
-                background: #e8f0fe;
-                color: #1a73e8;
-                font-size: .75rem;
-                font-weight: 600;
-                letter-spacing: .04em;
-                padding: .25rem .75rem;
-                border-radius: 999px;
-                margin-bottom: 1rem;
-                text-transform: uppercase;
-              }
-              h1 { font-size: 1.5rem; color: #1a202c; margin-bottom: .5rem; }
-              .meta { font-size: .85rem; color: #718096; margin-bottom: 2rem; line-height: 1.6; }
-              .meta span { font-weight: 600; color: #4a5568; }
-              .actions { display: flex; flex-direction: column; gap: .875rem; }
-              .btn {
-                display: flex;
-                align-items: center;
-                gap: .75rem;
-                padding: .875rem 1.25rem;
-                border-radius: 8px;
-                text-decoration: none;
-                font-size: .95rem;
-                font-weight: 600;
-                transition: transform .1s, box-shadow .1s;
-              }
-              .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.15); }
-              .btn-primary { background: #1a73e8; color: #fff; }
-              .btn-secondary { background: #f7fafc; color: #2d3748; border: 1.5px solid #e2e8f0; }
-              .btn svg { flex-shrink: 0; }
-              .footer { margin-top: 2rem; font-size: .78rem; color: #a0aec0; text-align: center; }
+              *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+              body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f2f5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
+              .card{background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.10);max-width:520px;width:100%;padding:2.5rem 2rem}
+              .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;font-size:.75rem;font-weight:600;letter-spacing:.04em;padding:.25rem .75rem;border-radius:999px;margin-bottom:1rem;text-transform:uppercase}
+              h1{font-size:1.5rem;color:#1a202c;margin-bottom:.5rem}
+              .meta{font-size:.85rem;color:#718096;margin-bottom:2rem;line-height:1.6}
+              .meta span{font-weight:600;color:#4a5568}
+              .actions{display:flex;flex-direction:column;gap:.875rem}
+              .btn{display:flex;align-items:center;gap:.75rem;padding:.875rem 1.25rem;border-radius:8px;text-decoration:none;font-size:.95rem;font-weight:600;transition:transform .1s,box-shadow .1s}
+              .btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.15)}
+              .btn-primary{background:#1a73e8;color:#fff}
+              .btn-secondary{background:#f7fafc;color:#2d3748;border:1.5px solid #e2e8f0}
+              .footer{margin-top:2rem;font-size:.78rem;color:#a0aec0;text-align:center}
             </style>
           </head>
           <body>
@@ -361,6 +320,7 @@ jobs:
                 <div>Branch: <span>${BRANCH}</span></div>
                 <div>Suite: <span>${SUITE}</span></div>
                 <div>Date: <span>${DATE}</span></div>
+                <div>Runner: <span>Public Repo B &mdash; Free unlimited minutes</span></div>
               </div>
               <div class="actions">
                 <a class="btn btn-primary" href="./report/" target="_blank">
@@ -371,139 +331,20 @@ jobs:
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   Download ZIP Report
                 </a>
-                <button class="btn btn-secondary" onclick="openModal()" style="border:none; cursor:pointer; width:100%;">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-                  Run New Tests
-                </button>
+                <a class="btn btn-secondary" href="https://${OWNER}.github.io/${REPO_NAME}/reports.html">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  All Reports
+                </a>
               </div>
-              <div class="footer">Ext Web Portal &bull; GitHub Actions</div>
+              <div class="footer">Syslatech &bull; Ext Web Portal &bull; GitHub Actions</div>
             </div>
-
-            <div id="run-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center;">
-              <div style="background:#fff; border-radius:12px; padding:2rem; max-width:420px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,.2);">
-                <h2 style="font-size:1.1rem; font-weight:700; color:#1a202c; margin-bottom:1.25rem;">Run New Tests</h2>
-                <div style="margin-bottom:.875rem;">
-                  <label style="display:block; font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:.3rem;">GitHub PAT <span style="font-weight:400; color:#a0aec0;">(workflow scope)</span></label>
-                  <input id="gh-token" type="password" placeholder="ghp_..." style="width:100%; padding:.6rem .75rem; border:1.5px solid #e2e8f0; border-radius:6px; font-size:.875rem; box-sizing:border-box;" />
-                </div>
-                <div style="margin-bottom:.875rem;">
-                  <label style="display:block; font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:.3rem;">Branch</label>
-                  <input id="run-branch" type="text" value="master" style="width:100%; padding:.6rem .75rem; border:1.5px solid #e2e8f0; border-radius:6px; font-size:.875rem; box-sizing:border-box;" />
-                </div>
-                <div style="margin-bottom:.875rem;">
-                  <label style="display:block; font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:.3rem;">Test Suite</label>
-                  <select id="run-suite" style="width:100%; padding:.6rem .75rem; border:1.5px solid #e2e8f0; border-radius:6px; font-size:.875rem; box-sizing:border-box;">
-                    <option value="all">all</option>
-                    <option value="loan-pricer">loan-pricer</option>
-                    <option value="quick-pricer">quick-pricer</option>
-                    <option value="unassigned">unassigned</option>
-                  </select>
-                </div>
-                <div style="margin-bottom:.875rem;">
-                  <label style="display:block; font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:.3rem;">Retries</label>
-                  <select id="run-retries" style="width:100%; padding:.6rem .75rem; border:1.5px solid #e2e8f0; border-radius:6px; font-size:.875rem; box-sizing:border-box;">
-                    <option value="on">on</option>
-                    <option value="off">off</option>
-                  </select>
-                </div>
-                <div style="margin-bottom:.875rem;">
-                  <label style="display:block; font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:.3rem;">Grep <span style="font-weight:400; color:#a0aec0;">(optional)</span></label>
-                  <input id="run-grep" type="text" placeholder="TC01 or smoke" style="width:100%; padding:.6rem .75rem; border:1.5px solid #e2e8f0; border-radius:6px; font-size:.875rem; box-sizing:border-box;" />
-                </div>
-                <div style="margin-bottom:1.25rem;">
-                  <label style="display:block; font-size:.78rem; font-weight:600; color:#4a5568; margin-bottom:.3rem;">Spec <span style="font-weight:400; color:#a0aec0;">(optional, overrides suite)</span></label>
-                  <input id="run-spec" type="text" placeholder="tests/ext-web/..." style="width:100%; padding:.6rem .75rem; border:1.5px solid #e2e8f0; border-radius:6px; font-size:.875rem; box-sizing:border-box;" />
-                </div>
-                <div id="run-status" style="display:none; padding:.7rem .875rem; border-radius:6px; font-size:.83rem; margin-bottom:1rem;"></div>
-                <div style="display:flex; gap:.75rem;">
-                  <button id="trigger-btn" onclick="triggerWorkflow()" style="flex:1; padding:.75rem; background:#1a73e8; color:#fff; border:none; border-radius:8px; font-size:.9rem; font-weight:600; cursor:pointer;">Trigger</button>
-                  <button onclick="closeModal()" style="padding:.75rem 1.25rem; background:#f7fafc; color:#2d3748; border:1.5px solid #e2e8f0; border-radius:8px; font-size:.9rem; font-weight:600; cursor:pointer;">Cancel</button>
-                </div>
-              </div>
-            </div>
-
-            <script>
-              var GH_OWNER = '${OWNER}';
-              var GH_REPO  = '${REPO_NAME}';
-              var GH_WFLOW = 'playwright2.yml';
-
-              function openModal() {
-                var saved = localStorage.getItem('gh_pat');
-                if (saved) document.getElementById('gh-token').value = saved;
-                document.getElementById('run-modal').style.display = 'flex';
-                document.getElementById('run-status').style.display = 'none';
-              }
-              function closeModal() {
-                document.getElementById('run-modal').style.display = 'none';
-              }
-              document.getElementById('run-modal').addEventListener('click', function(e) {
-                if (e.target === this) closeModal();
-              });
-
-              function setStatus(type, msg) {
-                var el = document.getElementById('run-status');
-                el.style.display = 'block';
-                var colors = {
-                  success: { bg:'#f0fff4', color:'#276749', border:'#9ae6b4' },
-                  error:   { bg:'#fff5f5', color:'#c53030', border:'#feb2b2' },
-                  info:    { bg:'#ebf8ff', color:'#2b6cb0', border:'#90cdf4' }
-                };
-                var c = colors[type] || colors.info;
-                el.style.background = c.bg;
-                el.style.color = c.color;
-                el.style.border = '1px solid ' + c.border;
-                el.textContent = msg;
-              }
-
-              async function triggerWorkflow() {
-                var token  = document.getElementById('gh-token').value.trim();
-                var branch = document.getElementById('run-branch').value.trim() || 'master';
-                var suite  = document.getElementById('run-suite').value;
-                var retries= document.getElementById('run-retries').value;
-                var grep   = document.getElementById('run-grep').value.trim();
-                var spec   = document.getElementById('run-spec').value.trim();
-                var btn    = document.getElementById('trigger-btn');
-
-                if (!token) { setStatus('error', 'GitHub PAT is required.'); return; }
-
-                localStorage.setItem('gh_pat', token);
-                btn.disabled = true;
-                btn.textContent = 'Triggering...';
-                setStatus('info', 'Sending request to GitHub API...');
-
-                try {
-                  var url = 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO + '/actions/workflows/' + GH_WFLOW + '/dispatches';
-                  var res = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                      'Authorization': 'Bearer ' + token,
-                      'Accept': 'application/vnd.github+json',
-                      'X-GitHub-Api-Version': '2022-11-28',
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ref: 'master', inputs: { branch: branch, test_suite: suite, retries: retries, grep: grep, spec: spec } })
-                  });
-                  if (res.status === 204) {
-                    setStatus('success', 'Workflow triggered successfully! It will appear in GitHub Actions shortly.');
-                  } else {
-                    var err = await res.json().catch(function() { return {}; });
-                    setStatus('error', 'Failed (' + res.status + '): ' + (err.message || 'Unknown error'));
-                  }
-                } catch(e) {
-                  setStatus('error', 'Request failed: ' + e.message);
-                }
-
-                btn.disabled = false;
-                btn.textContent = 'Trigger';
-              }
-            </script>
           </body>
           </html>
           HTMLEOF
 
           sed -i 's/^          //' "$PAGES_DIR/index.html"
 
-      # ── 11. Deploy landing page + report + ZIP to GitHub Pages ───────────
+      # ── 11. Deploy to GitHub Pages ─────────────────────────────────────────
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
@@ -513,10 +354,9 @@ jobs:
           destination_dir: reports/${{ github.run_number }}
           keep_files: true
 
-      # ── 12. Post report URL to Job Summary ───────────────────────────────
+      # ── 12. Post report URL to Job Summary ────────────────────────────────
       - name: Post report link to Job Summary
         if: always()
-        shell: bash
         run: |
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.repository }}"
@@ -528,15 +368,16 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Option | Link |" >> "$GITHUB_STEP_SUMMARY"
           echo "|--------|------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Landing page (view + download) | [Open]($PAGES_URL) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| View report directly | [Open Report](${PAGES_URL}report/) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Landing page | [Open]($PAGES_URL) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| View report | [Open Report](${PAGES_URL}report/) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Download ZIP | [Download](${PAGES_URL}report.zip) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| All reports | [Dashboard](https://${OWNER}.github.io/${REPO_NAME}/reports.html) |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> **Landing page URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **Report URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 13. Send email notification (uncomment to enable) ────────────────
+      # ── 13. Send email notification (uncomment to enable) ─────────────────
       # - name: Send email notification
-      #   if: always()
+      #   if: failure()
       #   env:
       #     EMAIL_USER:      ${{ secrets.EMAIL_USER }}
       #     EMAIL_PASS:      ${{ secrets.EMAIL_PASS }}
