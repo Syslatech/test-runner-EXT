@@ -220,10 +220,18 @@
 
   // Show token expiry in bottom right corner
   function renderExpiry() {
+    const corner = document.getElementById('token-corner');
+
+    if (!TOKEN || TOKEN === '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') {
+      corner.className = 'token-corner expired';
+      corner.innerHTML = `<div class="token-corner-dot dot-expired"></div>Token not configured — re-deploy`;
+      document.getElementById('run-btn').disabled = true;
+      return;
+    }
+
     const expiry = new Date(EXPIRY_DATE);
     const today  = new Date();
     const days   = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-    const corner = document.getElementById('token-corner');
     const dateStr = expiry.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
     let cls, dotCls, label;
@@ -244,6 +252,11 @@
   }
 
   async function triggerWorkflow() {
+    if (!TOKEN || TOKEN === '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') {
+      setStatus('error', 'Configuration error', 'Trigger token not injected. Re-deploy the site or contact admin.');
+      return;
+    }
+
     const branch  = document.getElementById('branch').value.trim() || 'master';
     const suite   = document.getElementById('suite').value;
     const retries = document.getElementById('retries').checked ? 'on' : 'off';
