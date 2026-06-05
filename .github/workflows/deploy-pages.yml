@@ -1,0 +1,58 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get PAT expiry date
+        id: expiry
+        env:
+          TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
+        run: |
+          TOKEN_INFO=$(curl -s -I -H "Authorization: Bearer $TRIGGER_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/users/octocat" 2>/dev/null | \
+            grep -i "github-authentication-token-expiration" | \
+            sed 's/.*: //' | tr -d '\r')
+
+          if [ -n "$TOKEN_INFO" ]; then
+            EXPIRY_DATE=$(echo "$TOKEN_INFO" | cut -d' ' -f1)
+          else
+            EXPIRY_DATE=$(date -d "+90 days" +%Y-%m-%d 2>/dev/null || date -v+90d +%Y-%m-%d)
+          fi
+
+          echo "expiry_date=$EXPIRY_DATE" >> "$GITHUB_OUTPUT"
+
+      - name: Inject secrets into TestRunner.html
+        env:
+          TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
+          EXPIRY_DATE: ${{ steps.expiry.outputs.expiry_date }}
+        run: |
+          mkdir -p dist
+          cp TestRunner.html dist/
+          cp reports.html dist/
+          sed -i \
+            -e "s|__TRIGGER_PAT__|${TRIGGER_PAT}|g" \
+            -e "s|__EXPIRY_DATE__|${EXPIRY_DATE}|g" \
+            dist/TestRunner.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          keep_files: true
