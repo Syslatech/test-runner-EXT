@@ -61,13 +61,25 @@ jobs:
           mkdir -p publish
           rsync -a --exclude='.git' --exclude='publish' . publish/
 
-          # Inject PAT and expiry date
-          sed -i \
-            -e "s|__TRIGGER_PAT__|${TRIGGER_PAT}|g" \
-            -e "s|__EXPIRY_DATE__|${EXPIRY_DATE}|g" \
-            publish/TestRunner.html
+          # Inject PAT and expiry date using Python (safe literal replacement, no special-char issues)
+          python3 - <<'PYEOF'
+import os, sys
 
-          echo "Injected PAT and expiry ($EXPIRY_DATE) into TestRunner.html"
+pat    = os.environ['TRIGGER_PAT']
+expiry = os.environ['EXPIRY_DATE']
+path   = 'publish/TestRunner.html'
+
+with open(path, 'r') as f:
+    content = f.read()
+
+content = content.replace('__TRIGGER_PAT__', pat)
+content = content.replace('__EXPIRY_DATE__', expiry)
+
+with open(path, 'w') as f:
+    f.write(content)
+
+print(f"Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}")
+PYEOF
 
           # Verify expiry date was injected
           grep -q "EXPIRY_DATE = '20" publish/TestRunner.html && \
