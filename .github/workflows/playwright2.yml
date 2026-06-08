@@ -100,7 +100,7 @@ jobs:
           echo "Detected Playwright version: $PW_VERSION"
           echo "pw_version=$PW_VERSION" >> "$GITHUB_OUTPUT"
           echo "docker_image=mcr.microsoft.com/playwright:v${PW_VERSION}-noble" >> "$GITHUB_OUTPUT"
-
+  #
   # ── Job 2: Run tests using matching Docker image ──────────────────────────
   test:
     needs: detect-version
@@ -264,13 +264,13 @@ jobs:
           if [ -d "playwright-report" ]; then
             cp -r playwright-report/. "$PAGES_DIR/report/"
           else
-            echo "<html><body><h2>No report generated.</h2></body></html>" > "$PAGES_DIR/report/index.html"
+            echo "<html><body><h2>No report generated.</h2></body></html>" > "$PAGES_DIR/report/TestRunner.html"
           fi
           ZIP_FILE=$(ls reports/html-reports-zip/*.zip 2>/dev/null | sort | tail -1)
           if [ -n "$ZIP_FILE" ]; then
             cp "$ZIP_FILE" "$PAGES_DIR/report.zip"
           fi
-          cat > "$PAGES_DIR/index.html" << HTMLEOF
+          cat > "$PAGES_DIR/TestRunner.html" << HTMLEOF
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -322,7 +322,7 @@ jobs:
           </body>
           </html>
           HTMLEOF
-          sed -i 's/^          //' "$PAGES_DIR/index.html"
+          sed -i 's/^          //' "$PAGES_DIR/TestRunner.html"
 
       # ── 10. Deploy to GitHub Pages ───────────────────────────────────────
       - name: Deploy report to GitHub Pages

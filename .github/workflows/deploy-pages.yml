@@ -57,29 +57,24 @@ jobs:
             exit 1
           fi
 
-          # Use rsync to copy everything except .git into publish/
+          # Copy only the web files into publish/
           mkdir -p publish
-          rsync -a --exclude='.git' --exclude='publish' . publish/
+          cp TestRunner.html publish/TestRunner.html
+          cp reports.html publish/reports.html
+          touch publish/.nojekyll
 
           # Inject PAT and expiry date using Python (safe literal replacement, no special-char issues)
-          python3 - <<'PYEOF'
-import os, sys
-
-pat    = os.environ['TRIGGER_PAT']
-expiry = os.environ['EXPIRY_DATE']
-path   = 'publish/TestRunner.html'
-
-with open(path, 'r') as f:
-    content = f.read()
-
-content = content.replace('__TRIGGER_PAT__', pat)
-content = content.replace('__EXPIRY_DATE__', expiry)
-
-with open(path, 'w') as f:
-    f.write(content)
-
-print(f"Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}")
-PYEOF
+          printf '%s\n' \
+            'import os' \
+            "pat    = os.environ['TRIGGER_PAT']" \
+            "expiry = os.environ['EXPIRY_DATE']" \
+            "path   = 'publish/TestRunner.html'" \
+            "content = open(path).read()" \
+            "content = content.replace('__TRIGGER_PAT__', pat)" \
+            "content = content.replace('__EXPIRY_DATE__', expiry)" \
+            "open(path, 'w').write(content)" \
+            "print(f'Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}')" \
+            | python3
 
           # Verify expiry date was injected
           grep -q "EXPIRY_DATE = '20" publish/TestRunner.html && \
@@ -103,8 +98,7 @@ PYEOF
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./publish
           publish_branch: gh-pages
-          keep_files: false
-          exclude_assets: '.github'
+          keep_files: true
 
       # ── 5. Summary ───────────────────────────────────────────────────────
       - name: Post deploy summary
