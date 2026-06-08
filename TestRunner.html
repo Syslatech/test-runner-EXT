@@ -172,7 +172,7 @@
 
   function renderExpiry() {
     const corner = document.getElementById('token-corner');
-    if (!TOKEN || TOKEN === '__TRIGGER_PAT__') {
+    if (!TOKEN || TOKEN.length < 20) {
       corner.className = 'token-corner expired';
       corner.innerHTML = '<div class="token-corner-dot dot-expired"></div>Token not configured — re-deploy';
       document.getElementById('run-btn').disabled = true;
@@ -199,7 +199,7 @@
   }
 
   async function triggerWorkflow() {
-    if (!TOKEN || TOKEN === '__TRIGGER_PAT__') {
+    if (!TOKEN || TOKEN.length < 20) {
       setStatus('error', 'Configuration error', 'Token not injected. Re-deploy the site or contact admin.');
       return;
     }
