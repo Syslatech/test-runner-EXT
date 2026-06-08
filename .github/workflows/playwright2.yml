@@ -1,14 +1,13 @@
 # ============================================================
-# Playwright Tests — PUBLIC REPO B (Free unlimited minutes)
+# Playwright Tests — triggered from test-runner-EXT HTML portal
 # ============================================================
 # Repo B (public):  Syslatech/test-runner-EXT   ← hosts the HTML
-# Repo A (private): Syslatech/LP-EXT-Web         ← has tests + THIS workflow
+# Repo A (private): Syslatech/LP-EXT-Web         ← THIS workflow lives here
 #
-# Triggered via repository_dispatch from TestRunner.html
-# event_type: 'playwright'
-# inputs arrive in: github.event.client_payload.*
+# Triggered via repository_dispatch (event_type: playwright)
+# from TestRunner.html, OR manually via workflow_dispatch.
 #
-# REQUIRED SECRETS in Repo B (test-runner-EXT):
+# REQUIRED SECRETS in LP-EXT-Web:
 #   CHECKOUT_PAT_EXT — PAT with Contents:Read on LP-EXT-Web
 #   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
 #   API_URL, CLIENT_ID, CLIENT_SECRET, INSTANCE_ID
@@ -23,12 +22,9 @@ permissions:
   id-token: write
 
 on:
-  # ✅ FIX: repository_dispatch triggered from TestRunner.html
-  # event_type 'playwright' sent by the HTML via GitHub API
   repository_dispatch:
     types: [playwright]
 
-  # Keep workflow_dispatch so you can also trigger manually from GitHub UI
   workflow_dispatch:
     inputs:
       branch:
@@ -61,29 +57,46 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# ✅ FIX: unified env block reads from BOTH trigger sources
-# repository_dispatch → github.event.client_payload.*
-# workflow_dispatch   → github.event.inputs.*
-env:
-  BRANCH:     ${{ github.event.client_payload.branch     || github.event.inputs.branch     || 'master' }}
-  TEST_SUITE: ${{ github.event.client_payload.test_suite || github.event.inputs.test_suite || 'all' }}
-  RETRIES:    ${{ github.event.client_payload.retries    || github.event.inputs.retries    || 'on' }}
-  GREP:       ${{ github.event.client_payload.grep       || github.event.inputs.grep       || '' }}
-  SPEC:       ${{ github.event.client_payload.spec       || github.event.inputs.spec       || '' }}
-
 jobs:
-  # ── Job 1: Detect Playwright version from LP-EXT-Web ─────────────────────
+  # ── Job 1: Resolve inputs + detect Playwright version ────────────────────
   detect-version:
     runs-on: ubuntu-latest
     outputs:
       pw_version:   ${{ steps.get-version.outputs.pw_version }}
       docker_image: ${{ steps.get-version.outputs.docker_image }}
+      branch:       ${{ steps.resolve.outputs.branch }}
+      test_suite:   ${{ steps.resolve.outputs.test_suite }}
+      retries:      ${{ steps.resolve.outputs.retries }}
+      grep:         ${{ steps.resolve.outputs.grep }}
+      spec:         ${{ steps.resolve.outputs.spec }}
+
     steps:
+      # Resolve inputs from either repository_dispatch or workflow_dispatch
+      - name: Resolve inputs
+        id: resolve
+        run: |
+          BRANCH="${{ github.event.client_payload.branch || github.event.inputs.branch }}"
+          BRANCH="${BRANCH:-master}"
+          TEST_SUITE="${{ github.event.client_payload.test_suite || github.event.inputs.test_suite }}"
+          TEST_SUITE="${TEST_SUITE:-all}"
+          RETRIES="${{ github.event.client_payload.retries || github.event.inputs.retries }}"
+          RETRIES="${RETRIES:-on}"
+          GREP="${{ github.event.client_payload.grep || github.event.inputs.grep }}"
+          SPEC="${{ github.event.client_payload.spec || github.event.inputs.spec }}"
+
+          echo "branch=$BRANCH"       >> "$GITHUB_OUTPUT"
+          echo "test_suite=$TEST_SUITE" >> "$GITHUB_OUTPUT"
+          echo "retries=$RETRIES"     >> "$GITHUB_OUTPUT"
+          echo "grep=$GREP"           >> "$GITHUB_OUTPUT"
+          echo "spec=$SPEC"           >> "$GITHUB_OUTPUT"
+
+          echo "Resolved → branch=$BRANCH suite=$TEST_SUITE retries=$RETRIES"
+
       - name: Checkout LP-EXT-Web to read package-lock.json
         uses: actions/checkout@v4
         with:
           repository: Syslatech/LP-EXT-Web
-          ref: ${{ env.BRANCH }}
+          ref: ${{ steps.resolve.outputs.branch }}
           token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
       - name: Detect Playwright version
@@ -108,11 +121,11 @@ jobs:
           echo "Detected Playwright version: $PW_VERSION"
           echo "pw_version=$PW_VERSION" >> "$GITHUB_OUTPUT"
           echo "docker_image=mcr.microsoft.com/playwright:v${PW_VERSION}-noble" >> "$GITHUB_OUTPUT"
-
-  # ── Job 2: Run tests using matching Docker image ──────────────────────────
+  #
+  # ── Job 2: Run tests ──────────────────────────────────────────────────────
   test:
     needs: detect-version
-    name: '${{ env.BRANCH }} — ${{ env.TEST_SUITE }}'
+    name: 'Tests — ${{ needs.detect-version.outputs.branch }}'
     timeout-minutes: 120
     runs-on: ubuntu-latest
     container:
@@ -120,11 +133,11 @@ jobs:
       options: --user root
 
     steps:
-      - name: Checkout private test repository (LP-EXT-Web)
+      - name: Checkout LP-EXT-Web
         uses: actions/checkout@v4
         with:
           repository: Syslatech/LP-EXT-Web
-          ref: ${{ env.BRANCH }}
+          ref: ${{ needs.detect-version.outputs.branch }}
           token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
       - name: Setup Node.js
@@ -140,27 +153,29 @@ jobs:
       - name: Show versions
         shell: bash
         run: |
-          echo "Docker image: ${{ needs.detect-version.outputs.docker_image }}"
-          echo "Playwright version: ${{ needs.detect-version.outputs.pw_version }}"
-          echo "Branch: ${{ env.BRANCH }}"
-          echo "Suite: ${{ env.TEST_SUITE }}"
-          echo "Trigger: ${{ github.event_name }}"
+          echo "Docker image : ${{ needs.detect-version.outputs.docker_image }}"
+          echo "PW version   : ${{ needs.detect-version.outputs.pw_version }}"
+          echo "Branch       : ${{ needs.detect-version.outputs.branch }}"
+          echo "Suite        : ${{ needs.detect-version.outputs.test_suite }}"
+          echo "Trigger      : ${{ github.event_name }}"
           npx playwright --version
 
       - name: Prepare run metadata
         id: meta
         shell: bash
         run: |
-          SAFE_BRANCH=$(echo "${{ env.BRANCH }}" | tr '/\\:*?"<>|' '-')
+          BRANCH="${{ needs.detect-version.outputs.branch }}"
+          SUITE="${{ needs.detect-version.outputs.test_suite }}"
+          RETRIES="${{ needs.detect-version.outputs.retries }}"
+          SAFE_BRANCH=$(echo "$BRANCH" | tr '/\\:*?"<>|' '-')
           echo "safe_branch=$SAFE_BRANCH" >> "$GITHUB_OUTPUT"
-          echo "run_date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
           echo "## Test Run Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Branch | \`${{ env.BRANCH }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Suite | \`${{ env.TEST_SUITE }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Retries | \`${{ env.RETRIES }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`$BRANCH\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | \`$SUITE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Retries | \`$RETRIES\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| PW Version | \`${{ needs.detect-version.outputs.pw_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Trigger | \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
@@ -184,10 +199,10 @@ jobs:
           EMAIL_PASS:    ${{ secrets.EMAIL_PASS }}
           EMAIL_TO:      ${{ secrets.EMAIL_TO }}
         run: |
-          SUITE="${{ env.TEST_SUITE }}"
-          GREP="${{ env.GREP }}"
-          SPEC="${{ env.SPEC }}"
-          RETRIES="${{ env.RETRIES }}"
+          SUITE="${{ needs.detect-version.outputs.test_suite }}"
+          GREP="${{ needs.detect-version.outputs.grep }}"
+          SPEC="${{ needs.detect-version.outputs.spec }}"
+          RETRIES="${{ needs.detect-version.outputs.retries }}"
           SPEC="${SPEC//\\//}"
 
           if [[ "$RETRIES" == "on" ]]; then
@@ -242,7 +257,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: test-report-${{ steps.meta.outputs.safe_branch }}-${{ env.TEST_SUITE }}-run${{ github.run_number }}
+          name: test-report-${{ steps.meta.outputs.safe_branch }}-${{ needs.detect-version.outputs.test_suite }}-run${{ github.run_number }}
           path: |
             playwright-report/
             test-results/
@@ -255,11 +270,9 @@ jobs:
         shell: bash
         run: |
           OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.repository }}"
-          REPO_NAME="${REPO#*/}"
           RUN="${{ github.run_number }}"
-          BRANCH="${{ env.BRANCH }}"
-          SUITE="${{ env.TEST_SUITE }}"
+          BRANCH="${{ needs.detect-version.outputs.branch }}"
+          SUITE="${{ needs.detect-version.outputs.test_suite }}"
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
           PW_VER="${{ needs.detect-version.outputs.pw_version }}"
           PAGES_DIR="pages-deploy"
@@ -267,13 +280,13 @@ jobs:
           if [ -d "playwright-report" ]; then
             cp -r playwright-report/. "$PAGES_DIR/report/"
           else
-            echo "<html><body><h2>No report generated.</h2></body></html>" > "$PAGES_DIR/report/index.html"
+            echo "<html><body><h2>No report generated.</h2></body></html>" > "$PAGES_DIR/report/TestRunner.html"
           fi
           ZIP_FILE=$(ls reports/html-reports-zip/*.zip 2>/dev/null | sort | tail -1)
           if [ -n "$ZIP_FILE" ]; then
             cp "$ZIP_FILE" "$PAGES_DIR/report.zip"
           fi
-          cat > "$PAGES_DIR/index.html" << HTMLEOF
+          cat > "$PAGES_DIR/TestRunner.html" << HTMLEOF
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -307,16 +320,25 @@ jobs:
                 <div>Playwright: <span>v${PW_VER}</span></div>
               </div>
               <div class="actions">
-                <a class="btn btn-primary" href="./report/" target="_blank">View Test Report</a>
-                <a class="btn btn-secondary" href="./report.zip" download>Download ZIP</a>
-                <a class="btn btn-secondary" href="https://${OWNER}.github.io/test-runner-EXT/reports.html">All Reports</a>
+                <a class="btn btn-primary" href="./report/" target="_blank">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  View Test Report
+                </a>
+                <a class="btn btn-secondary" href="./report.zip" download>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download ZIP
+                </a>
+                <a class="btn btn-secondary" href="https://${OWNER}.github.io/${REPO_NAME}/reports.html">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  All Reports
+                </a>
               </div>
               <div class="footer">Syslatech &bull; Ext Web Portal &bull; GitHub Actions</div>
             </div>
           </body>
           </html>
           HTMLEOF
-          sed -i 's/^          //' "$PAGES_DIR/index.html"
+          sed -i 's/^          //' "$PAGES_DIR/TestRunner.html"
 
       - name: Deploy report to GitHub Pages
         if: always()
@@ -332,8 +354,6 @@ jobs:
         shell: bash
         run: |
           OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.repository }}"
-          REPO_NAME="${REPO#*/}"
           RUN="${{ github.run_number }}"
           PAGES_URL="https://${OWNER}.github.io/test-runner-EXT/reports/${RUN}/"
           echo "" >> "$GITHUB_STEP_SUMMARY"

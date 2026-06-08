@@ -186,7 +186,7 @@
       'Accept': 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28'
     };
-    if (TOKEN && TOKEN !== '__TRIGGER_PAT__') {
+    if (TOKEN && TOKEN.length >= 20) {
       headers['Authorization'] = 'Bearer ' + TOKEN;
     }
 
