@@ -1,6 +1,8 @@
 # ============================================================
 # Deploy Pages — runs on every push to master
-# No token injection needed — proxy approach handles auth
+# Injects TRIGGER_PAT and EXPIRY_DATE into TestRunner.html
+# and reports.html (token needed to read LP-EXT-Web runs)
+# The token NEVER sits in the repo — only in GitHub Secrets
 # ============================================================
 
 name: Deploy Pages
@@ -19,26 +21,98 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      # ── 1. Checkout Repo B ──────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Copy files to publish/
+      # ── 2. Get PAT expiry date from GitHub API ──────────────────────────
+      - name: Get PAT expiry date
+        id: expiry
+        env:
+          TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
         run: |
+          TOKEN_INFO=$(curl -s -I \
+            -H "Authorization: Bearer $TRIGGER_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/users/octocat" 2>/dev/null | \
+            grep -i "github-authentication-token-expiration" | \
+            sed 's/.*: //' | tr -d '\r')
+
+          if [ -n "$TOKEN_INFO" ]; then
+            EXPIRY_DATE=$(echo "$TOKEN_INFO" | cut -d' ' -f1)
+          else
+            EXPIRY_DATE=$(date -d "+90 days" +%Y-%m-%d 2>/dev/null || date -v+90d +%Y-%m-%d)
+          fi
+
+          echo "expiry_date=$EXPIRY_DATE" >> "$GITHUB_OUTPUT"
+          echo "PAT expiry date: $EXPIRY_DATE"
+
+      # ── 3. Inject secrets into TestRunner.html AND reports.html ──────────
+      - name: Inject secrets into HTML files
+        env:
+          TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
+          EXPIRY_DATE: ${{ steps.expiry.outputs.expiry_date }}
+        run: |
+          if [ -z "$TRIGGER_PAT" ]; then
+            echo "❌ TRIGGER_PAT secret is empty or not set — aborting deployment"
+            exit 1
+          fi
+
+          # Copy only the web files into publish/
           mkdir -p publish
-          rsync -a --exclude='.git' --exclude='publish' . publish/
+          cp TestRunner.html publish/TestRunner.html
+          cp reports.html publish/reports.html
+          touch publish/.nojekyll
+
+          # Inject PAT and expiry date using Python (safe literal replacement, no special-char issues)
+          printf '%s\n' \
+            'import os' \
+            "pat    = os.environ['TRIGGER_PAT']" \
+            "expiry = os.environ['EXPIRY_DATE']" \
+            "for path in ['publish/TestRunner.html', 'publish/reports.html']:" \
+            "    content = open(path).read()" \
+            "    content = content.replace('__TRIGGER_PAT__', pat)" \
+            "    content = content.replace('__EXPIRY_DATE__', expiry)" \
+            "    open(path, 'w').write(content)" \
+            "    print(f'Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}')" \
+            | python3
+
+          # Verify expiry date was injected
+          grep -q "EXPIRY_DATE = '20" publish/TestRunner.html && \
+            echo "✅ Expiry date injected successfully" || \
+            echo "⚠️ Expiry injection check failed"
+
+          # Verify token placeholder was replaced (fail if still present)
+          if grep -q "__TRIGGER_PAT__" publish/TestRunner.html; then
+            echo "❌ TestRunner.html — token injection failed"
+            exit 1
+          else
+            echo "✅ TestRunner.html — token injected"
+          fi
+
+          # ── Verify reports.html ───────────────────────────────────────
+          if grep -q "__TRIGGER_PAT__" publish/reports.html; then
+            echo "❌ reports.html — token injection failed"
+            exit 1
+          else
+            echo "✅ reports.html — token injected"
+          fi
+
           ls -la publish/
 
+      # ── 4. Deploy publish/ to GitHub Pages ──────────────────────────────
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./publish
           publish_branch: gh-pages
-          keep_files: false
-          exclude_assets: '.github'
+          keep_files: true
 
+      # ── 5. Summary ───────────────────────────────────────────────────────
       - name: Post deploy summary
         run: |
+          EXPIRY="${{ steps.expiry.outputs.expiry_date }}"
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.repository }}"
           REPO_NAME="${REPO#*/}"
@@ -48,4 +122,5 @@ jobs:
           echo "|------|-------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Trigger UI | [TestRunner.html](https://${OWNER}.github.io/${REPO_NAME}/TestRunner.html) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Reports | [reports.html](https://${OWNER}.github.io/${REPO_NAME}/reports.html) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Token in HTML | ❌ Never — proxy workflow handles auth |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| PAT expires | \`${EXPIRY}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Token in repo | ❌ Never — injected at deploy time |" >> "$GITHUB_STEP_SUMMARY"
