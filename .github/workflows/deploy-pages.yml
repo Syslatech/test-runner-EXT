@@ -69,12 +69,12 @@ jobs:
             'import os' \
             "pat    = os.environ['TRIGGER_PAT']" \
             "expiry = os.environ['EXPIRY_DATE']" \
-            "path   = 'publish/TestRunner.html'" \
-            "content = open(path).read()" \
-            "content = content.replace('__TRIGGER_PAT__', pat)" \
-            "content = content.replace('__EXPIRY_DATE__', expiry)" \
-            "open(path, 'w').write(content)" \
-            "print(f'Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}')" \
+            "for path in ['publish/TestRunner.html', 'publish/reports.html']:" \
+            "    content = open(path).read()" \
+            "    content = content.replace('__TRIGGER_PAT__', pat)" \
+            "    content = content.replace('__EXPIRY_DATE__', expiry)" \
+            "    open(path, 'w').write(content)" \
+            "    print(f'Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}')" \
             | python3
 
           # Verify expiry date was injected
