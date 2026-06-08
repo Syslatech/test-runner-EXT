@@ -1,14 +1,15 @@
 # ============================================================
 # Playwright Tests — PUBLIC REPO B (Free unlimited minutes)
 # ============================================================
-# Repo B (public):  Syslatech/test-runner-EXT
-# Repo A (private): Syslatech/Lp-EXT-Web
+# Repo B (public):  Syslatech/test-runner-EXT   ← hosts the HTML
+# Repo A (private): Syslatech/LP-EXT-Web         ← has tests + THIS workflow
 #
-# AUTO-DETECTS Playwright version from package-lock.json
-# Pulls matching Docker image automatically — no version mismatch ever
+# Triggered via repository_dispatch from TestRunner.html
+# event_type: 'playwright'
+# inputs arrive in: github.event.client_payload.*
 #
-# REQUIRED SECRETS in Repo B:
-#   CHECKOUT_PAT_EXT — PAT with Contents:Read on Lp-EXT-Web
+# REQUIRED SECRETS in Repo B (test-runner-EXT):
+#   CHECKOUT_PAT_EXT — PAT with Contents:Read on LP-EXT-Web
 #   STG_URL, STG2_URL, ENCOMPASS_URL, ID, USER_ID, PASSWORD
 #   API_URL, CLIENT_ID, CLIENT_SECRET, INSTANCE_ID
 #   EMAIL_USER, EMAIL_PASS, EMAIL_TO
@@ -22,10 +23,16 @@ permissions:
   id-token: write
 
 on:
+  # ✅ FIX: repository_dispatch triggered from TestRunner.html
+  # event_type 'playwright' sent by the HTML via GitHub API
+  repository_dispatch:
+    types: [playwright]
+
+  # Keep workflow_dispatch so you can also trigger manually from GitHub UI
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch in Repo A (Lp-EXT-Web) to test'
+        description: 'Branch in LP-EXT-Web to test'
         required: false
         default: 'master'
         type: string
@@ -34,21 +41,15 @@ on:
         required: false
         default: 'all'
         type: choice
-        options:
-          - all
-          - loan-pricer
-          - quick-pricer
-          - unassigned
+        options: [all, loan-pricer, quick-pricer, unassigned]
       retries:
         description: 'Retry failed tests (1 retry when on)'
         required: false
         default: 'on'
         type: choice
-        options:
-          - 'on'
-          - 'off'
+        options: ['on', 'off']
       grep:
-        description: 'TC filter — single: TC01 | multiple: TC01|TC05|TC12 | keyword: smoke'
+        description: 'TC filter — single: TC01 | multiple: TC01|TC05 | keyword: smoke'
         required: false
         default: ''
       spec:
@@ -60,19 +61,29 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# ✅ FIX: unified env block reads from BOTH trigger sources
+# repository_dispatch → github.event.client_payload.*
+# workflow_dispatch   → github.event.inputs.*
+env:
+  BRANCH:     ${{ github.event.client_payload.branch     || github.event.inputs.branch     || 'master' }}
+  TEST_SUITE: ${{ github.event.client_payload.test_suite || github.event.inputs.test_suite || 'all' }}
+  RETRIES:    ${{ github.event.client_payload.retries    || github.event.inputs.retries    || 'on' }}
+  GREP:       ${{ github.event.client_payload.grep       || github.event.inputs.grep       || '' }}
+  SPEC:       ${{ github.event.client_payload.spec       || github.event.inputs.spec       || '' }}
+
 jobs:
-  # ── Job 1: Detect Playwright version from Repo A ─────────────────────────
+  # ── Job 1: Detect Playwright version from LP-EXT-Web ─────────────────────
   detect-version:
     runs-on: ubuntu-latest
     outputs:
-      pw_version: ${{ steps.get-version.outputs.pw_version }}
+      pw_version:   ${{ steps.get-version.outputs.pw_version }}
       docker_image: ${{ steps.get-version.outputs.docker_image }}
     steps:
-      - name: Checkout Repo A to read package-lock.json
+      - name: Checkout LP-EXT-Web to read package-lock.json
         uses: actions/checkout@v4
         with:
-          repository: Syslatech/Lp-EXT-Web
-          ref: ${{ github.event.inputs.branch || 'master' }}
+          repository: Syslatech/LP-EXT-Web
+          ref: ${{ env.BRANCH }}
           token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
       - name: Detect Playwright version
@@ -80,19 +91,16 @@ jobs:
         run: |
           PW_VERSION=$(node -e "
             const lock = require('./package-lock.json');
-            const pkg = lock.packages?.['node_modules/@playwright/test'] 
-                     || lock.packages?.['node_modules/playwright']
-                     || Object.values(lock.dependencies || {}).find((_, k) => k === '@playwright/test');
+            const pkg = lock.packages?.['node_modules/@playwright/test']
+                     || lock.packages?.['node_modules/playwright'];
             console.log(pkg?.version || '');
           ")
-          
+
           if [ -z "$PW_VERSION" ]; then
-            # Fallback: read from package.json
             PW_VERSION=$(node -e "
               const p = require('./package.json');
-              const v = p.dependencies?.['@playwright/test'] 
-                     || p.devDependencies?.['@playwright/test'] 
-                     || '';
+              const v = p.dependencies?.['@playwright/test']
+                     || p.devDependencies?.['@playwright/test'] || '';
               console.log(v.replace(/[\^~>=<]/g,'').trim());
             ")
           fi
@@ -104,7 +112,7 @@ jobs:
   # ── Job 2: Run tests using matching Docker image ──────────────────────────
   test:
     needs: detect-version
-    name: '${{ github.event.inputs.branch }} — ${{ github.event.inputs.test_suite }}'
+    name: '${{ env.BRANCH }} — ${{ env.TEST_SUITE }}'
     timeout-minutes: 120
     runs-on: ubuntu-latest
     container:
@@ -112,15 +120,13 @@ jobs:
       options: --user root
 
     steps:
-      # ── 1. Checkout PRIVATE Repo A using PAT ───────────────────────────
-      - name: Checkout private test repository (Lp-EXT-Web)
+      - name: Checkout private test repository (LP-EXT-Web)
         uses: actions/checkout@v4
         with:
-          repository: Syslatech/Lp-EXT-Web
-          ref: ${{ github.event.inputs.branch || 'master' }}
+          repository: Syslatech/LP-EXT-Web
+          ref: ${{ env.BRANCH }}
           token: ${{ secrets.CHECKOUT_PAT_EXT }}
 
-      # ── 2. Node.js setup ────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -128,70 +134,68 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      # ── 3. Install dependencies ─────────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
-      # ── 4. Show versions for debugging ──────────────────────────────────
       - name: Show versions
         shell: bash
         run: |
           echo "Docker image: ${{ needs.detect-version.outputs.docker_image }}"
           echo "Playwright version: ${{ needs.detect-version.outputs.pw_version }}"
+          echo "Branch: ${{ env.BRANCH }}"
+          echo "Suite: ${{ env.TEST_SUITE }}"
+          echo "Trigger: ${{ github.event_name }}"
           npx playwright --version
 
-      # ── 5. Prepare run metadata ──────────────────────────────────────────
       - name: Prepare run metadata
         id: meta
         shell: bash
         run: |
-          BRANCH="${{ github.event.inputs.branch || 'master' }}"
-          SUITE="${{ github.event.inputs.test_suite }}"
-          RETRIES="${{ github.event.inputs.retries }}"
-          SAFE_BRANCH=$(echo "$BRANCH" | tr '/\\:*?"<>|' '-')
+          SAFE_BRANCH=$(echo "${{ env.BRANCH }}" | tr '/\\:*?"<>|' '-')
           echo "safe_branch=$SAFE_BRANCH" >> "$GITHUB_OUTPUT"
           echo "run_date=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
           echo "## Test Run Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Repo A Branch | \`$BRANCH\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Suite | \`$SUITE\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Retries | \`$RETRIES\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`${{ env.BRANCH }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | \`${{ env.TEST_SUITE }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Retries | \`${{ env.RETRIES }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| PW Version | \`${{ needs.detect-version.outputs.pw_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Docker Image | \`${{ needs.detect-version.outputs.docker_image }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Trigger | \`${{ github.event_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Run | \`${{ github.run_number }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 6. Run Playwright tests ──────────────────────────────────────────
       - name: Run Playwright tests
         shell: bash
         env:
-          USE_CI_ENV: 'true'
-          HOME: /root
-          STG_URL:        ${{ secrets.STG_URL }}
-          STG2_URL:       ${{ secrets.STG2_URL }}
-          ENCOMPASS_URL:  ${{ secrets.ENCOMPASS_URL }}
-          ID:             ${{ secrets.ID }}
-          USER_ID:        ${{ secrets.USER_ID }}
-          PASSWORD:       ${{ secrets.PASSWORD }}
-          API_URL:        ${{ secrets.API_URL }}
-          CLIENT_ID:      ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET:  ${{ secrets.CLIENT_SECRET }}
-          INSTANCE_ID:    ${{ secrets.INSTANCE_ID }}
-          EMAIL_USER:     ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS:     ${{ secrets.EMAIL_PASS }}
-          EMAIL_TO:       ${{ secrets.EMAIL_TO }}
+          USE_CI_ENV:    'true'
+          HOME:          /root
+          STG_URL:       ${{ secrets.STG_URL }}
+          STG2_URL:      ${{ secrets.STG2_URL }}
+          ENCOMPASS_URL: ${{ secrets.ENCOMPASS_URL }}
+          ID:            ${{ secrets.ID }}
+          USER_ID:       ${{ secrets.USER_ID }}
+          PASSWORD:      ${{ secrets.PASSWORD }}
+          API_URL:       ${{ secrets.API_URL }}
+          CLIENT_ID:     ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          INSTANCE_ID:   ${{ secrets.INSTANCE_ID }}
+          EMAIL_USER:    ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS:    ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO:      ${{ secrets.EMAIL_TO }}
         run: |
-          SUITE="${{ github.event.inputs.test_suite }}"
-          GREP="${{ github.event.inputs.grep }}"
-          SPEC="${{ github.event.inputs.spec }}"
-          RETRIES="${{ github.event.inputs.retries }}"
+          SUITE="${{ env.TEST_SUITE }}"
+          GREP="${{ env.GREP }}"
+          SPEC="${{ env.SPEC }}"
+          RETRIES="${{ env.RETRIES }}"
           SPEC="${SPEC//\\//}"
+
           if [[ "$RETRIES" == "on" ]]; then
             RETRY_FLAG="--retries=1"
           else
             RETRY_FLAG="--retries=0"
           fi
+
           declare -a CMD
           if [[ -n "$SPEC" ]]; then
             CMD=(npx playwright test "$SPEC" "$RETRY_FLAG")
@@ -219,26 +223,26 @@ jobs:
                 ;;
             esac
           fi
+
           if [[ -n "$GREP" ]]; then
             CMD+=(--grep "$GREP")
           fi
+
           echo "Running: ${CMD[*]}"
           "${CMD[@]}"
 
-      # ── 7. Generate ZIP report ───────────────────────────────────────────
       - name: Generate report ZIP
         if: always()
         continue-on-error: true
         shell: bash
         run: node reports/generate-report.js
 
-      # ── 8. Upload artifacts ──────────────────────────────────────────────
       - name: Upload test artifacts
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: test-report-${{ steps.meta.outputs.safe_branch }}-${{ github.event.inputs.test_suite }}-run${{ github.run_number }}
+          name: test-report-${{ steps.meta.outputs.safe_branch }}-${{ env.TEST_SUITE }}-run${{ github.run_number }}
           path: |
             playwright-report/
             test-results/
@@ -246,7 +250,6 @@ jobs:
             reports/html-reports-zip/
           retention-days: 1
 
-      # ── 9. Stage Pages deployment ────────────────────────────────────────
       - name: Stage Pages deployment
         if: always()
         shell: bash
@@ -255,8 +258,8 @@ jobs:
           REPO="${{ github.repository }}"
           REPO_NAME="${REPO#*/}"
           RUN="${{ github.run_number }}"
-          BRANCH="${{ github.event.inputs.branch || 'master' }}"
-          SUITE="${{ github.event.inputs.test_suite }}"
+          BRANCH="${{ env.BRANCH }}"
+          SUITE="${{ env.TEST_SUITE }}"
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
           PW_VER="${{ needs.detect-version.outputs.pw_version }}"
           PAGES_DIR="pages-deploy"
@@ -304,18 +307,9 @@ jobs:
                 <div>Playwright: <span>v${PW_VER}</span></div>
               </div>
               <div class="actions">
-                <a class="btn btn-primary" href="./report/" target="_blank">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  View Test Report
-                </a>
-                <a class="btn btn-secondary" href="./report.zip" download>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Download ZIP
-                </a>
-                <a class="btn btn-secondary" href="https://${OWNER}.github.io/${REPO_NAME}/reports.html">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                  All Reports
-                </a>
+                <a class="btn btn-primary" href="./report/" target="_blank">View Test Report</a>
+                <a class="btn btn-secondary" href="./report.zip" download>Download ZIP</a>
+                <a class="btn btn-secondary" href="https://${OWNER}.github.io/test-runner-EXT/reports.html">All Reports</a>
               </div>
               <div class="footer">Syslatech &bull; Ext Web Portal &bull; GitHub Actions</div>
             </div>
@@ -324,7 +318,6 @@ jobs:
           HTMLEOF
           sed -i 's/^          //' "$PAGES_DIR/index.html"
 
-      # ── 10. Deploy to GitHub Pages ───────────────────────────────────────
       - name: Deploy report to GitHub Pages
         if: always()
         uses: peaceiris/actions-gh-pages@v4
@@ -334,7 +327,6 @@ jobs:
           destination_dir: reports/${{ github.run_number }}
           keep_files: true
 
-      # ── 11. Post report URL to Job Summary ──────────────────────────────
       - name: Post report link to Job Summary
         if: always()
         shell: bash
@@ -343,7 +335,7 @@ jobs:
           REPO="${{ github.repository }}"
           REPO_NAME="${REPO#*/}"
           RUN="${{ github.run_number }}"
-          PAGES_URL="https://${OWNER}.github.io/${REPO_NAME}/reports/${RUN}/"
+          PAGES_URL="https://${OWNER}.github.io/test-runner-EXT/reports/${RUN}/"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Test Report" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -352,16 +344,4 @@ jobs:
           echo "| Landing page | [Open]($PAGES_URL) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| View report | [Open Report](${PAGES_URL}report/) |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Download ZIP | [Download](${PAGES_URL}report.zip) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| All reports | [Dashboard](https://${OWNER}.github.io/${REPO_NAME}/reports.html) |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> **Report URL:** \`$PAGES_URL\`" >> "$GITHUB_STEP_SUMMARY"
-
-      # ── 12. Send email notification (uncomment to enable) ─────────────────
-      # - name: Send email notification
-      #   if: always()
-      #   env:
-      #     EMAIL_USER:      ${{ secrets.EMAIL_USER }}
-      #     EMAIL_PASS:      ${{ secrets.EMAIL_PASS }}
-      #     EMAIL_TO:        ${{ secrets.EMAIL_TO }}
-      #     AUTO_SEND_EMAIL: 'true'
-      #   run: node reports/send-email.js
+          echo "| All reports | [Dashboard](https://${OWNER}.github.io/test-runner-EXT/reports.html) |" >> "$GITHUB_STEP_SUMMARY"
