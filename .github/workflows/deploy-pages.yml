@@ -1,6 +1,7 @@
 # ============================================================
 # Deploy Pages — runs on every push to master
 # Injects TRIGGER_PAT and EXPIRY_DATE into TestRunner.html
+# and reports.html (token needed to read LP-EXT-Web runs)
 # The token NEVER sits in the repo — only in GitHub Secrets
 # ============================================================
 
@@ -46,8 +47,8 @@ jobs:
           echo "expiry_date=$EXPIRY_DATE" >> "$GITHUB_OUTPUT"
           echo "PAT expiry date: $EXPIRY_DATE"
 
-      # ── 3. Inject secrets into TestRunner.html ───────────────────────────
-      - name: Inject secrets into TestRunner.html
+      # ── 3. Inject secrets into TestRunner.html AND reports.html ──────────
+      - name: Inject secrets into HTML files
         env:
           TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
           EXPIRY_DATE: ${{ steps.expiry.outputs.expiry_date }}
@@ -83,10 +84,18 @@ jobs:
 
           # Verify token placeholder was replaced (fail if still present)
           if grep -q "__TRIGGER_PAT__" publish/TestRunner.html; then
-            echo "❌ Token injection failed — placeholder still present in TestRunner.html"
+            echo "❌ TestRunner.html — token injection failed"
             exit 1
           else
-            echo "✅ Token injected successfully"
+            echo "✅ TestRunner.html — token injected"
+          fi
+
+          # ── Verify reports.html ───────────────────────────────────────
+          if grep -q "__TRIGGER_PAT__" publish/reports.html; then
+            echo "❌ reports.html — token injection failed"
+            exit 1
+          else
+            echo "✅ reports.html — token injected"
           fi
 
           ls -la publish/
