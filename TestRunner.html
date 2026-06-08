@@ -16,17 +16,8 @@
       --success: #22c55e; --error: #f87171; --warn: #fbbf24;
       --radius: 10px; --radius-lg: 16px;
     }
-    body {
-      font-family: 'DM Mono', monospace;
-      background: var(--bg); color: var(--text);
-      min-height: 100vh; display: flex; flex-direction: column;
-      align-items: center; padding: 2.5rem 1.5rem 4rem;
-    }
-    body::before {
-      content: ''; position: fixed; inset: 0;
-      background-image: linear-gradient(rgba(79,142,247,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(79,142,247,.04) 1px, transparent 1px);
-      background-size: 32px 32px; pointer-events: none; z-index: 0;
-    }
+    body { font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2.5rem 1.5rem 4rem; }
+    body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(79,142,247,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(79,142,247,.04) 1px, transparent 1px); background-size: 32px 32px; pointer-events: none; z-index: 0; }
     .wrapper { position: relative; z-index: 1; width: 100%; max-width: 560px; }
     .header { text-align: center; margin-bottom: 2rem; }
     .logo { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 1rem; }
@@ -43,6 +34,8 @@
     .row { margin-bottom: 1.25rem; }
     .row:last-child { margin-bottom: 0; }
     label { display: block; font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; }
+    .select-wrap { position: relative; }
+    .select-wrap .loading-badge { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); font-size: .65rem; color: var(--muted); }
     select, input[type=text] { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem 1rem; color: var(--text); font-family: inherit; font-size: .9rem; outline: none; transition: border-color .15s; }
     select:focus, input:focus { border-color: var(--accent); }
     select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237b82a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 2.5rem; -webkit-appearance: none; }
@@ -66,10 +59,36 @@
     .status.loading { border-color: rgba(79,142,247,.3); background: rgba(79,142,247,.07); color: var(--accent); }
     .status.success { border-color: rgba(34,197,94,.3); background: rgba(34,197,94,.07); color: var(--success); }
     .status.error { border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.07); color: var(--error); }
+    .status.warn { border-color: rgba(251,191,36,.3); background: rgba(251,191,36,.07); color: var(--warn); }
     .status-body { flex: 1; }
     .status-title { font-weight: 700; margin-bottom: 2px; }
     .status-detail { opacity: .75; font-size: .78rem; }
     .status a { color: inherit; }
+    /* Live polling box */
+    .poll-box { display: none; margin-top: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; }
+    .poll-box.show { display: block; }
+    .poll-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .75rem; }
+    .poll-title { font-size: .8rem; font-weight: 700; color: var(--text); letter-spacing: .06em; text-transform: uppercase; }
+    .poll-badge { font-size: .68rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; }
+    .poll-badge.queued   { background: rgba(123,130,160,.15); color: var(--muted); }
+    .poll-badge.running  { background: rgba(251,191,36,.15);  color: var(--warn); }
+    .poll-badge.success  { background: rgba(34,197,94,.15);   color: var(--success); }
+    .poll-badge.failure  { background: rgba(248,113,113,.15); color: var(--error); }
+    .poll-badge.cancelled{ background: rgba(123,130,160,.15); color: var(--muted); }
+    .poll-steps { display: flex; flex-direction: column; gap: 6px; }
+    .poll-step { display: flex; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
+    .poll-step.done  { color: var(--success); }
+    .poll-step.active{ color: var(--warn); }
+    .poll-step.fail  { color: var(--error); }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+    .step-dot.done  { background: var(--success); }
+    .step-dot.active{ background: var(--warn); }
+    .step-dot.fail  { background: var(--error); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulsing { animation: pulse 1.2s ease-in-out infinite; }
+    .poll-link { margin-top: .75rem; font-size: .75rem; }
+    .poll-link a { color: var(--accent); text-decoration: none; }
+    .poll-link a:hover { text-decoration: underline; }
     .footer { text-align: center; font-size: .72rem; color: var(--muted); margin-top: 2rem; letter-spacing: .05em; }
     .token-corner { position: fixed; bottom: 1rem; right: 1rem; font-family: 'DM Mono', monospace; font-size: .68rem; font-weight: 500; padding: .4rem .8rem; border-radius: 999px; border: 1px solid; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(8px); z-index: 100; }
     .token-corner.ok      { background: rgba(34,197,94,.08);  border-color: rgba(34,197,94,.25);  color: var(--success); }
@@ -102,19 +121,29 @@
   </div>
 
   <div class="card">
+    <!-- Branch dropdown -->
     <div class="row">
       <label for="branch">Branch (LP-EXT-Web)</label>
-      <input type="text" id="branch" value="master" placeholder="master, develop, feature/xyz"/>
+      <div class="select-wrap">
+        <select id="branch">
+          <option value="master">master</option>
+        </select>
+        <span class="loading-badge" id="branch-loading">Loading…</span>
+      </div>
     </div>
+
+    <!-- Test suite dropdown -->
     <div class="row">
       <label for="suite">Test suite</label>
-      <select id="suite">
-        <option value="all">All — Full regression</option>
-        <option value="loan-pricer">Loan Pricer</option>
-        <option value="quick-pricer">Quick Pricer</option>
-        <option value="unassigned">Unassigned</option>
-      </select>
+      <div class="select-wrap">
+        <select id="suite">
+          <option value="all">All — Full regression</option>
+        </select>
+        <span class="loading-badge" id="suite-loading">Loading…</span>
+      </div>
     </div>
+
+    <!-- Retry toggle -->
     <div class="row">
       <div class="toggle-row">
         <div class="toggle-label-group">
@@ -127,12 +156,17 @@
         </label>
       </div>
     </div>
+
     <div class="divider"></div>
+
+    <!-- TC filter -->
     <div class="row">
       <label for="grep">TC filter</label>
       <input type="text" id="grep" placeholder="REG_TS01_TC01  or  REG_TS01_TC01|REG_TS01_TC05  or  smoke"/>
       <p class="hint">Single: REG_TS01_TC01 · Multiple: REG_TS01_TC01|REG_TS01_TC05|REG_TS01_TC12 · Keyword: smoke</p>
     </div>
+
+    <!-- Spec file -->
     <div class="row">
       <label for="spec">Specific spec file</label>
       <input type="text" id="spec" placeholder="tests/ext-web/quickpricer"/>
@@ -151,108 +185,286 @@
     </div>
   </div>
 
+  <!-- Live polling box -->
+  <div class="poll-box" id="poll-box">
+    <div class="poll-header">
+      <span class="poll-title">Live Run Status</span>
+      <span class="poll-badge queued" id="poll-badge">Queued</span>
+    </div>
+    <div class="poll-steps" id="poll-steps">
+      <div class="poll-step" id="step-detect"><span class="step-dot"></span>Detect Playwright version</div>
+      <div class="poll-step" id="step-checkout"><span class="step-dot"></span>Checkout LP-EXT-Web</div>
+      <div class="poll-step" id="step-install"><span class="step-dot"></span>Install dependencies</div>
+      <div class="poll-step" id="step-run"><span class="step-dot"></span>Run Playwright tests</div>
+      <div class="poll-step" id="step-report"><span class="step-dot"></span>Generate & deploy report</div>
+    </div>
+    <div class="poll-link" id="poll-link"></div>
+  </div>
+
   <div class="footer">Syslatech · Ext Web Portal</div>
-  <div class="token-corner" id="token-corner"></div>
 </div>
+
+<div class="token-corner" id="token-corner"></div>
 
 <script>
   // ════════════════════════════════════════════════════════
-  // CONFIG — injected by deploy workflow via GitHub Secrets
+  // CONFIG — TOKEN injected at deploy time for API reads
+  // Run Tests uses proxy.yml — no token sent from browser
   // ════════════════════════════════════════════════════════
-  const TOKEN       = '__TRIGGER_PAT__';   // injected at deploy time
-  const EXPIRY_DATE = '__EXPIRY_DATE__';   // injected at deploy time
+  const TOKEN = '__TRIGGER_PAT__';
 
-  // ✅ FIX: Target LP-EXT-Web (Repo 1, private) via repository_dispatch
-  // The HTML lives in test-runner-EXT (Repo 2, public)
-  // but dispatches to LP-EXT-Web which holds the actual workflow
-  const OWNER          = 'Syslatech';
-  const REPO           = 'LP-EXT-Web';        // ✅ Repo 1 (private, has the tests)
-  const DISPATCH_EVENT = 'playwright';         // ✅ event_type LP-EXT-Web workflow listens for
-  // ════════════════════════════════════════════════════════
+  const TARGET_OWNER = 'Syslatech';
+  const TARGET_REPO  = 'LP-EXT-Web';
+  const PROXY_OWNER  = 'Syslatech';
+  const PROXY_REPO   = 'test-runner-EXT';
+  const PROXY_WF     = 'proxy.yml';
+  const TESTS_PATH   = 'tests/ext-web';
 
+  let pollTimer = null;
+  let pollRunId = null;
+
+  // ── Token badge ─────────────────────────────────────────
   function renderExpiry() {
     const corner = document.getElementById('token-corner');
-    if (!TOKEN || TOKEN === '__TRIGGER_PAT__') {
+    if (!TOKEN || TOKEN.length < 20) {
       corner.className = 'token-corner expired';
-      corner.innerHTML = '<div class="token-corner-dot dot-expired"></div>Token not configured — re-deploy';
-      document.getElementById('run-btn').disabled = true;
+      corner.innerHTML = '<div class="token-corner-dot dot-expired"></div>Token not configured';
       return;
     }
-    const expiry  = new Date(EXPIRY_DATE);
-    const today   = new Date();
-    const days    = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-    const dateStr = expiry.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    let cls, dotCls, label;
-    if (days <= 0) {
-      cls = 'expired'; dotCls = 'dot-expired';
-      label = 'Token EXPIRED — rotate PAT & re-deploy';
-      document.getElementById('run-btn').disabled = true;
-    } else if (days <= 14) {
-      cls = 'warn'; dotCls = 'dot-warn';
-      label = 'Token expires ' + dateStr + ' · ' + days + 'd left';
-    } else {
-      cls = 'ok'; dotCls = 'dot-ok';
-      label = 'Token expires ' + dateStr;
-    }
-    corner.className = 'token-corner ' + cls;
-    corner.innerHTML = '<div class="token-corner-dot ' + dotCls + '"></div>' + label;
+    corner.className = 'token-corner ok';
+    corner.innerHTML = '<div class="token-corner-dot dot-ok"></div>Ready';
   }
 
-  async function triggerWorkflow() {
-    if (!TOKEN || TOKEN === '__TRIGGER_PAT__') {
-      setStatus('error', 'Configuration error', 'Token not injected. Re-deploy the site or contact admin.');
-      return;
+  // ── GitHub API helper ────────────────────────────────────
+  function ghHeaders() {
+    const h = { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (TOKEN && TOKEN.length >= 20) h['Authorization'] = 'Bearer ' + TOKEN;
+    return h;
+  }
+
+  // ── Load branches from LP-EXT-Web ───────────────────────
+  async function loadBranches() {
+    const sel = document.getElementById('branch');
+    const lbl = document.getElementById('branch-loading');
+    try {
+      const res = await fetch(
+        'https://api.github.com/repos/' + TARGET_OWNER + '/' + TARGET_REPO + '/branches?per_page=50',
+        { headers: ghHeaders() }
+      );
+      if (!res.ok) throw new Error('API ' + res.status);
+      const data = await res.json();
+      sel.innerHTML = '';
+      data.forEach(function(b) {
+        const opt = document.createElement('option');
+        opt.value = b.name;
+        opt.textContent = b.name;
+        if (b.name === 'master') opt.selected = true;
+        sel.appendChild(opt);
+      });
+      lbl.textContent = '';
+    } catch (e) {
+      lbl.textContent = 'Failed';
+      console.warn('Branch load error:', e);
     }
-    const branch  = document.getElementById('branch').value.trim() || 'master';
+  }
+
+  // ── Load test suites from tests/ext-web folder ───────────
+  async function loadSuites() {
+    const sel = document.getElementById('suite');
+    const lbl = document.getElementById('suite-loading');
+    try {
+      const res = await fetch(
+        'https://api.github.com/repos/' + TARGET_OWNER + '/' + TARGET_REPO + '/contents/' + TESTS_PATH,
+        { headers: ghHeaders() }
+      );
+      if (!res.ok) throw new Error('API ' + res.status);
+      const data = await res.json();
+      const folders = data.filter(function(f) { return f.type === 'dir'; });
+      sel.innerHTML = '<option value="all">All — Full regression</option>';
+      folders.forEach(function(f) {
+        const opt = document.createElement('option');
+        opt.value = f.name;
+        opt.textContent = f.name.replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+        sel.appendChild(opt);
+      });
+      lbl.textContent = '';
+    } catch (e) {
+      lbl.textContent = 'Failed';
+      // fallback options
+      sel.innerHTML = '<option value="all">All — Full regression</option>' +
+        '<option value="loan-pricer">Loan Pricer</option>' +
+        '<option value="quick-pricer">Quick Pricer</option>' +
+        '<option value="unassigned">Unassigned</option>';
+      console.warn('Suite load error:', e);
+    }
+  }
+
+  // ── Trigger workflow ─────────────────────────────────────
+  async function triggerWorkflow() {
+    const branch  = document.getElementById('branch').value;
     const suite   = document.getElementById('suite').value;
     const retries = document.getElementById('retries').checked ? 'on' : 'off';
     const grep    = document.getElementById('grep').value.trim();
     const spec    = document.getElementById('spec').value.trim();
 
-    setStatus('loading', 'Dispatching to LP-EXT-Web…', 'Branch: ' + branch + ' · Suite: ' + suite + ' · Retries: ' + retries);
+    setStatus('loading', 'Dispatching tests…', 'Branch: ' + branch + ' · Suite: ' + suite);
     document.getElementById('run-btn').disabled = true;
+    hidePollBox();
 
     try {
-      // ✅ FIX: repository_dispatch to LP-EXT-Web
-      // event_type 'playwright' triggers the workflow in LP-EXT-Web
-      // inputs go in client_payload (NOT inputs:{} — that's workflow_dispatch only)
       const res = await fetch(
-        'https://api.github.com/repos/' + OWNER + '/' + REPO + '/dispatches',
+        'https://api.github.com/repos/' + PROXY_OWNER + '/' + PROXY_REPO + '/actions/workflows/' + PROXY_WF + '/dispatches',
         {
           method: 'POST',
           headers: {
-            'Authorization': 'Bearer ' + TOKEN,
             'Accept': 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: DISPATCH_EVENT,
-            client_payload: {
-              branch:     branch,
-              test_suite: suite,
-              retries:    retries,
-              grep:       grep,
-              spec:       spec
-            }
+            ref: 'master',
+            inputs: { branch: branch, test_suite: suite, retries: retries, grep: grep, spec: spec }
           })
         }
       );
 
       if (res.status === 204) {
-        const actionsUrl = 'https://github.com/Syslatech/test-runner-EXT/actions';
-        setStatus('success', '✅ Tests triggered successfully!',
-          '<a href="' + actionsUrl + '" target="_blank">Watch run on GitHub Actions →</a>&nbsp;&nbsp;<a href="reports.html">View reports →</a>');
+        setStatus('success', '✅ Tests dispatched!', 'Waiting for run to start… checking every 10s');
+        startPolling(branch);
       } else {
         const err = await res.json().catch(function() { return {}; });
-        setStatus('error', 'GitHub returned ' + res.status,
-          err.message || 'Token may lack repo dispatch permission on LP-EXT-Web. Check PAT scope.');
+        setStatus('error', 'GitHub returned ' + res.status, err.message || 'Check GitHub Actions.');
+        document.getElementById('run-btn').disabled = false;
       }
     } catch (e) {
       setStatus('error', 'Network error', e.message);
-    } finally {
       document.getElementById('run-btn').disabled = false;
     }
+  }
+
+  // ── Polling ──────────────────────────────────────────────
+  function startPolling(branch) {
+    showPollBox();
+    setBadge('queued', 'Queued');
+    const startTime = Date.now();
+    pollRunId = null;
+
+    pollTimer = setInterval(async function() {
+      try {
+        // Find the latest run triggered after startTime
+        if (!pollRunId) {
+          const r = await fetch(
+            'https://api.github.com/repos/' + TARGET_OWNER + '/' + TARGET_REPO +
+            '/actions/runs?branch=' + encodeURIComponent(branch) + '&per_page=5',
+            { headers: ghHeaders() }
+          );
+          const data = await r.json();
+          const runs = (data.workflow_runs || []).filter(function(x) {
+            return new Date(x.created_at).getTime() >= startTime - 30000;
+          });
+          if (runs.length > 0) {
+            pollRunId = runs[0].id;
+            updatePollLink(runs[0].html_url);
+          } else {
+            setBadge('queued', 'Queued');
+            return;
+          }
+        }
+
+        // Poll the specific run
+        const r2 = await fetch(
+          'https://api.github.com/repos/' + TARGET_OWNER + '/' + TARGET_REPO + '/actions/runs/' + pollRunId,
+          { headers: ghHeaders() }
+        );
+        const run = await r2.json();
+        updatePollUI(run);
+
+        if (run.status === 'completed') {
+          clearInterval(pollTimer);
+          document.getElementById('run-btn').disabled = false;
+          if (run.conclusion === 'success') {
+            setStatus('success', '✅ All tests passed!',
+              '<a href="' + run.html_url + '" target="_blank">View run →</a>&nbsp;&nbsp;<a href="reports.html">View reports →</a>');
+          } else {
+            setStatus('error', '❌ Tests ' + run.conclusion,
+              '<a href="' + run.html_url + '" target="_blank">View run →</a>&nbsp;&nbsp;<a href="reports.html">View reports →</a>');
+          }
+        }
+      } catch (e) {
+        console.warn('Poll error:', e);
+      }
+    }, 10000);
+  }
+
+  function updatePollUI(run) {
+    const status = run.status;
+    const conclusion = run.conclusion;
+
+    if (status === 'queued') { setBadge('queued', 'Queued'); return; }
+    if (status === 'in_progress') setBadge('running', '● Running');
+    if (status === 'completed') {
+      setBadge(conclusion === 'success' ? 'success' : 'failure',
+               conclusion === 'success' ? '✓ Passed' : '✗ ' + conclusion);
+    }
+
+    // Rough progress based on elapsed time
+    const elapsed = (Date.now() - new Date(run.created_at).getTime()) / 1000;
+    updateSteps(status, conclusion, elapsed);
+  }
+
+  function updateSteps(status, conclusion, elapsed) {
+    const steps = [
+      { id: 'step-detect',   threshold: 0  },
+      { id: 'step-checkout', threshold: 20 },
+      { id: 'step-install',  threshold: 40 },
+      { id: 'step-run',      threshold: 70 },
+      { id: 'step-report',   threshold: 200 }
+    ];
+
+    steps.forEach(function(s, i) {
+      const el = document.getElementById(s.id);
+      const dot = el.querySelector('.step-dot');
+      if (status === 'completed') {
+        if (conclusion === 'success') {
+          el.className = 'poll-step done'; dot.className = 'step-dot done';
+        } else {
+          // Mark last step as fail, rest as done
+          if (i === steps.length - 1) { el.className = 'poll-step fail'; dot.className = 'step-dot fail'; }
+          else { el.className = 'poll-step done'; dot.className = 'step-dot done'; }
+        }
+      } else if (elapsed > s.threshold) {
+        const next = steps[i + 1];
+        if (next && elapsed > next.threshold) {
+          el.className = 'poll-step done'; dot.className = 'step-dot done';
+        } else {
+          el.className = 'poll-step active'; dot.className = 'step-dot active pulsing';
+        }
+      }
+    });
+  }
+
+  function setBadge(cls, label) {
+    const b = document.getElementById('poll-badge');
+    b.className = 'poll-badge ' + cls;
+    b.textContent = label;
+  }
+
+  function updatePollLink(url) {
+    document.getElementById('poll-link').innerHTML =
+      '<a href="' + url + '" target="_blank">View on GitHub Actions →</a>';
+  }
+
+  function showPollBox() { document.getElementById('poll-box').classList.add('show'); }
+  function hidePollBox() {
+    document.getElementById('poll-box').classList.remove('show');
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    // Reset steps
+    ['step-detect','step-checkout','step-install','step-run','step-report'].forEach(function(id) {
+      const el = document.getElementById(id);
+      el.className = 'poll-step';
+      el.querySelector('.step-dot').className = 'step-dot';
+    });
+    document.getElementById('poll-link').innerHTML = '';
   }
 
   function setStatus(type, title, detail) {
@@ -262,7 +474,10 @@
     document.getElementById('status-detail').innerHTML  = detail;
   }
 
+  // ── Init ─────────────────────────────────────────────────
   renderExpiry();
+  loadBranches();
+  loadSuites();
 </script>
 </body>
 </html>
