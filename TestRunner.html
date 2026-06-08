@@ -28,8 +28,6 @@
       background-size: 32px 32px; pointer-events: none; z-index: 0;
     }
     .wrapper { position: relative; z-index: 1; width: 100%; max-width: 560px; }
-
-    /* Header */
     .header { text-align: center; margin-bottom: 2rem; }
     .logo { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 1rem; }
     .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
@@ -37,25 +35,15 @@
     .logo-text { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
     h1 { font-size: 1.6rem; font-weight: 700; color: #fff; margin-bottom: .4rem; }
     .subtitle { font-size: .82rem; color: var(--muted); }
-
-
-
-    /* Nav */
     .nav { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; margin-bottom: 1.5rem; }
     .nav-btn { flex: 1; padding: .55rem; border-radius: 7px; border: none; background: transparent; color: var(--muted); font-family: inherit; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: all .15s; text-decoration: none; text-align: center; display: block; }
     .nav-btn.active { background: var(--surface2); color: var(--text); }
     .nav-btn:hover:not(.active) { color: var(--text); }
-
-    /* Card */
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; margin-bottom: 1rem; }
     .row { margin-bottom: 1.25rem; }
     .row:last-child { margin-bottom: 0; }
     label { display: block; font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; }
-    select, input[type=text] {
-      width: 100%; background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: .7rem 1rem; color: var(--text);
-      font-family: inherit; font-size: .9rem; outline: none; transition: border-color .15s;
-    }
+    select, input[type=text] { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem 1rem; color: var(--text); font-family: inherit; font-size: .9rem; outline: none; transition: border-color .15s; }
     select:focus, input:focus { border-color: var(--accent); }
     select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237b82a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 2.5rem; -webkit-appearance: none; }
     .hint { font-size: .72rem; color: var(--muted); margin-top: .4rem; }
@@ -69,22 +57,10 @@
     .toggle input:checked + .slider { background: rgba(79,142,247,.2); border-color: var(--accent); }
     .toggle input:checked + .slider::before { transform: translateX(18px); background: var(--accent); }
     .divider { height: 1px; background: var(--border); margin: 1.25rem 0; }
-
-    /* Run button */
-    .run-btn {
-      width: 100%; padding: .9rem 1.5rem;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border: none; border-radius: var(--radius); color: #fff;
-      font-family: inherit; font-size: .95rem; font-weight: 700;
-      letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
-      transition: opacity .15s, transform .1s;
-      display: flex; align-items: center; justify-content: center; gap: 10px;
-    }
+    .run-btn { width: 100%; padding: .9rem 1.5rem; background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; border-radius: var(--radius); color: #fff; font-family: inherit; font-size: .95rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: opacity .15s, transform .1s; display: flex; align-items: center; justify-content: center; gap: 10px; }
     .run-btn:hover { opacity: .9; }
     .run-btn:active { transform: scale(.98); }
     .run-btn:disabled { opacity: .4; cursor: not-allowed; }
-
-    /* Status */
     .status { display: none; align-items: flex-start; gap: 12px; padding: 1rem 1.25rem; border-radius: var(--radius); border: 1px solid; font-size: .85rem; line-height: 1.5; margin-top: 1rem; }
     .status.show { display: flex; }
     .status.loading { border-color: rgba(79,142,247,.3); background: rgba(79,142,247,.07); color: var(--accent); }
@@ -95,27 +71,18 @@
     .status-detail { opacity: .75; font-size: .78rem; }
     .status a { color: inherit; }
     .footer { text-align: center; font-size: .72rem; color: var(--muted); margin-top: 2rem; letter-spacing: .05em; }
-    .token-corner {
-      position: fixed; bottom: 1rem; right: 1rem;
-      font-family: 'DM Mono', monospace;
-      font-size: .68rem; font-weight: 500;
-      padding: .4rem .8rem; border-radius: 999px;
-      border: 1px solid; display: flex; align-items: center; gap: 6px;
-      backdrop-filter: blur(8px); z-index: 100;
-    }
+    .token-corner { position: fixed; bottom: 1rem; right: 1rem; font-family: 'DM Mono', monospace; font-size: .68rem; font-weight: 500; padding: .4rem .8rem; border-radius: 999px; border: 1px solid; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(8px); z-index: 100; }
     .token-corner.ok      { background: rgba(34,197,94,.08);  border-color: rgba(34,197,94,.25);  color: var(--success); }
     .token-corner.warn    { background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.25); color: var(--warn); }
     .token-corner.expired { background: rgba(248,113,113,.08);border-color: rgba(248,113,113,.25);color: var(--error); }
     .token-corner-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .dot-ok      { background: var(--success); }
-    .dot-warn    { background: var(--warn); }
+    .dot-ok { background: var(--success); }
+    .dot-warn { background: var(--warn); }
     .dot-expired { background: var(--error); }
   </style>
 </head>
 <body>
 <div class="wrapper">
-
-  <!-- Header -->
   <div class="header">
     <div class="logo">
       <div class="logo-icon">
@@ -129,22 +96,16 @@
     <p class="subtitle">Trigger automated tests · View reports</p>
   </div>
 
-  <!-- Nav -->
   <div class="nav">
     <button class="nav-btn active">▶ Trigger</button>
     <a class="nav-btn" href="reports.html">📊 Reports</a>
   </div>
 
-  <!-- Form card -->
   <div class="card">
-
-    <!-- Branch -->
     <div class="row">
-      <label for="branch">Branch (Lp-EXT-Web)</label>
+      <label for="branch">Branch (LP-EXT-Web)</label>
       <input type="text" id="branch" value="master" placeholder="master, develop, feature/xyz"/>
     </div>
-
-    <!-- Suite -->
     <div class="row">
       <label for="suite">Test suite</label>
       <select id="suite">
@@ -154,8 +115,6 @@
         <option value="unassigned">Unassigned</option>
       </select>
     </div>
-
-    <!-- Retries -->
     <div class="row">
       <div class="toggle-row">
         <div class="toggle-label-group">
@@ -168,31 +127,23 @@
         </label>
       </div>
     </div>
-
     <div class="divider"></div>
-
-    <!-- Grep -->
     <div class="row">
-      <label for="grep">TC filter <span style="opacity:.5;font-weight:400"></span></label>
+      <label for="grep">TC filter</label>
       <input type="text" id="grep" placeholder="REG_TS01_TC01  or  REG_TS01_TC01|REG_TS01_TC05  or  smoke"/>
       <p class="hint">Single: REG_TS01_TC01 · Multiple: REG_TS01_TC01|REG_TS01_TC05|REG_TS01_TC12 · Keyword: smoke</p>
     </div>
-
-    <!-- Spec -->
     <div class="row">
-      <label for="spec">Specific spec file <span style="opacity:.5;font-weight:400"></span></label>
+      <label for="spec">Specific spec file</label>
       <input type="text" id="spec" placeholder="tests/ext-web/quickpricer"/>
     </div>
-
   </div>
 
-  <!-- Run button -->
   <button class="run-btn" id="run-btn" onclick="triggerWorkflow()">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
     Run Tests
   </button>
 
-  <!-- Status banner -->
   <div class="status" id="status">
     <div class="status-body">
       <div class="status-title" id="status-title"></div>
@@ -200,94 +151,102 @@
     </div>
   </div>
 
-  <div class="footer">Syslatech · Ext Web Portal </div>
-
-  <!-- Token info bottom corner -->
+  <div class="footer">Syslatech · Ext Web Portal</div>
   <div class="token-corner" id="token-corner"></div>
-
 </div>
 
 <script>
   // ════════════════════════════════════════════════════════
-  // CONFIG — update TOKEN and EXPIRY_DATE when you rotate PAT
+  // CONFIG — injected by deploy workflow via GitHub Secrets
   // ════════════════════════════════════════════════════════
-  const TOKEN       = '__TRIGGER_PAT__';      // injected at deploy time
-  const EXPIRY_DATE = '__EXPIRY_DATE__';      // injected at deploy time           
-  const OWNER       = 'Syslatech';
-  const REPO        = 'test-runner-EXT';
-  const WORKFLOW    = 'playwright2.yml';
+  const TOKEN       = '__TRIGGER_PAT__';   // injected at deploy time
+  const EXPIRY_DATE = '__EXPIRY_DATE__';   // injected at deploy time
+
+  // ✅ FIX: Target LP-EXT-Web (Repo 1, private) via repository_dispatch
+  // The HTML lives in test-runner-EXT (Repo 2, public)
+  // but dispatches to LP-EXT-Web which holds the actual workflow
+  const OWNER          = 'Syslatech';
+  const REPO           = 'LP-EXT-Web';        // ✅ Repo 1 (private, has the tests)
+  const DISPATCH_EVENT = 'playwright';         // ✅ event_type LP-EXT-Web workflow listens for
   // ════════════════════════════════════════════════════════
 
-  // Show token expiry in bottom right corner
   function renderExpiry() {
     const corner = document.getElementById('token-corner');
-
     if (!TOKEN || TOKEN === '__TRIGGER_PAT__') {
       corner.className = 'token-corner expired';
-      corner.innerHTML = `<div class="token-corner-dot dot-expired"></div>Token not configured — re-deploy`;
+      corner.innerHTML = '<div class="token-corner-dot dot-expired"></div>Token not configured — re-deploy';
       document.getElementById('run-btn').disabled = true;
       return;
     }
-
-    const expiry = new Date(EXPIRY_DATE);
-    const today  = new Date();
-    const days   = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+    const expiry  = new Date(EXPIRY_DATE);
+    const today   = new Date();
+    const days    = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
     const dateStr = expiry.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
     let cls, dotCls, label;
     if (days <= 0) {
       cls = 'expired'; dotCls = 'dot-expired';
-      label = `Token EXPIRED`;
+      label = 'Token EXPIRED — rotate PAT & re-deploy';
       document.getElementById('run-btn').disabled = true;
     } else if (days <= 14) {
       cls = 'warn'; dotCls = 'dot-warn';
-      label = `Token expires ${dateStr} · ${days}d left`;
+      label = 'Token expires ' + dateStr + ' · ' + days + 'd left';
     } else {
       cls = 'ok'; dotCls = 'dot-ok';
-      label = `Token expires ${dateStr}`;
+      label = 'Token expires ' + dateStr;
     }
-
-    corner.className = `token-corner ${cls}`;
-    corner.innerHTML = `<div class="token-corner-dot ${dotCls}"></div>${label}`;
+    corner.className = 'token-corner ' + cls;
+    corner.innerHTML = '<div class="token-corner-dot ' + dotCls + '"></div>' + label;
   }
 
   async function triggerWorkflow() {
     if (!TOKEN || TOKEN === '__TRIGGER_PAT__') {
-      setStatus('error', 'Configuration error', 'Trigger token not injected. Re-deploy the site or contact admin.');
+      setStatus('error', 'Configuration error', 'Token not injected. Re-deploy the site or contact admin.');
       return;
     }
-
     const branch  = document.getElementById('branch').value.trim() || 'master';
     const suite   = document.getElementById('suite').value;
     const retries = document.getElementById('retries').checked ? 'on' : 'off';
     const grep    = document.getElementById('grep').value.trim();
     const spec    = document.getElementById('spec').value.trim();
 
-    setStatus('loading', 'Dispatching workflow…', `Branch: ${branch} · Suite: ${suite} · Retries: ${retries}`);
+    setStatus('loading', 'Dispatching to LP-EXT-Web…', 'Branch: ' + branch + ' · Suite: ' + suite + ' · Retries: ' + retries);
     document.getElementById('run-btn').disabled = true;
 
     try {
+      // ✅ FIX: repository_dispatch to LP-EXT-Web
+      // event_type 'playwright' triggers the workflow in LP-EXT-Web
+      // inputs go in client_payload (NOT inputs:{} — that's workflow_dispatch only)
       const res = await fetch(
-        `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`,
+        'https://api.github.com/repos/' + OWNER + '/' + REPO + '/dispatches',
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${TOKEN}`,
+            'Authorization': 'Bearer ' + TOKEN,
             'Accept': 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ ref: 'master', inputs: { branch, test_suite: suite, retries, grep, spec } })
+          body: JSON.stringify({
+            event_type: DISPATCH_EVENT,
+            client_payload: {
+              branch:     branch,
+              test_suite: suite,
+              retries:    retries,
+              grep:       grep,
+              spec:       spec
+            }
+          })
         }
       );
 
       if (res.status === 204) {
-        const actionsUrl = `https://github.com/${OWNER}/${REPO}/actions`;
+        const actionsUrl = 'https://github.com/Syslatech/test-runner-EXT/actions';
         setStatus('success', '✅ Tests triggered successfully!',
-          `<a href="${actionsUrl}" target="_blank">Watch run on GitHub Actions →</a>&nbsp;&nbsp;<a href="reports.html">View reports →</a>`);
+          '<a href="' + actionsUrl + '" target="_blank">Watch run on GitHub Actions →</a>&nbsp;&nbsp;<a href="reports.html">View reports →</a>');
       } else {
-        const err = await res.json().catch(() => ({}));
-        setStatus('error', `GitHub returned ${res.status}`, err.message || 'Token may have expired. Contact admin.');
+        const err = await res.json().catch(function() { return {}; });
+        setStatus('error', 'GitHub returned ' + res.status,
+          err.message || 'Token may lack repo dispatch permission on LP-EXT-Web. Check PAT scope.');
       }
     } catch (e) {
       setStatus('error', 'Network error', e.message);
@@ -298,9 +257,9 @@
 
   function setStatus(type, title, detail) {
     const el = document.getElementById('status');
-    el.className = `status show ${type}`;
+    el.className = 'status show ' + type;
     document.getElementById('status-title').textContent = title;
-    document.getElementById('status-detail').innerHTML = detail;
+    document.getElementById('status-detail').innerHTML  = detail;
   }
 
   renderExpiry();

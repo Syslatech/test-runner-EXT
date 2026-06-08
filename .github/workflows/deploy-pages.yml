@@ -1,6 +1,7 @@
 # ============================================================
 # Deploy Pages — runs on every push to master
 # Injects TRIGGER_PAT and EXPIRY_DATE into TestRunner.html
+# and reports.html (token needed to read LP-EXT-Web runs)
 # The token NEVER sits in the repo — only in GitHub Secrets
 # ============================================================
 
@@ -46,8 +47,8 @@ jobs:
           echo "expiry_date=$EXPIRY_DATE" >> "$GITHUB_OUTPUT"
           echo "PAT expiry date: $EXPIRY_DATE"
 
-      # ── 3. Inject secrets into TestRunner.html ───────────────────────────
-      - name: Inject secrets into TestRunner.html
+      # ── 3. Inject secrets into TestRunner.html AND reports.html ──────────
+      - name: Inject secrets into HTML files
         env:
           TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
           EXPIRY_DATE: ${{ steps.expiry.outputs.expiry_date }}
@@ -57,41 +58,57 @@ jobs:
             exit 1
           fi
 
-          # Use rsync to copy everything except .git into publish/
+          # Copy everything except .git into publish/
           mkdir -p publish
           rsync -a --exclude='.git' --exclude='publish' . publish/
 
-          # Inject PAT and expiry date using Python (safe literal replacement, no special-char issues)
+          # Inject PAT and expiry into BOTH HTML files
           python3 - <<'PYEOF'
-import os, sys
+import os
 
 pat    = os.environ['TRIGGER_PAT']
 expiry = os.environ['EXPIRY_DATE']
-path   = 'publish/TestRunner.html'
 
-with open(path, 'r') as f:
-    content = f.read()
+# ✅ FIX: inject into both files
+files = [
+    'publish/TestRunner.html',
+    'publish/reports.html',
+]
 
-content = content.replace('__TRIGGER_PAT__', pat)
-content = content.replace('__EXPIRY_DATE__', expiry)
+for path in files:
+    try:
+        with open(path, 'r') as f:
+            content = f.read()
 
-with open(path, 'w') as f:
-    f.write(content)
+        content = content.replace('__TRIGGER_PAT__', pat)
+        content = content.replace('__EXPIRY_DATE__', expiry)
 
-print(f"Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}")
+        with open(path, 'w') as f:
+            f.write(content)
+
+        print(f"✅ Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}")
+    except FileNotFoundError:
+        print(f"⚠️  Skipped {path} — file not found")
 PYEOF
 
-          # Verify expiry date was injected
+          # ── Verify TestRunner.html ────────────────────────────────────────
           grep -q "EXPIRY_DATE = '20" publish/TestRunner.html && \
-            echo "✅ Expiry date injected successfully" || \
-            echo "⚠️ Expiry injection check failed"
+            echo "✅ TestRunner.html — expiry injected" || \
+            echo "⚠️  TestRunner.html — expiry injection check failed"
 
-          # Verify token placeholder was replaced (fail if still present)
           if grep -q "__TRIGGER_PAT__" publish/TestRunner.html; then
-            echo "❌ Token injection failed — placeholder still present in TestRunner.html"
+            echo "❌ TestRunner.html — token injection failed"
             exit 1
           else
-            echo "✅ Token injected successfully"
+            echo "✅ TestRunner.html — token injected"
+          fi
+
+          # ── Verify reports.html ───────────────────────────────────────────
+          if grep -q "__TRIGGER_PAT__" publish/reports.html; then
+            echo "❌ reports.html — token injection failed"
+            exit 1
+          else
+            echo "✅ reports.html — token injected"
           fi
 
           ls -la publish/
