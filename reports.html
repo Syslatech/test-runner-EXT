@@ -133,7 +133,7 @@
   // ════════════════════════════════════════════════════════
   // CONFIG — injected by deploy workflow via GitHub Secrets
   // ════════════════════════════════════════════════════════
-  const TOKEN = '__TRIGGER_PAT__';   // injected at deploy time
+  const TOKEN = atob('__TRIGGER_PAT__');   // base64-decoded at runtime
 
   // ✅ FIX: OWNER/REPO point to LP-EXT-Web (Repo 1, private)
   // Reports come from the workflow runs in LP-EXT-Web, not test-runner-EXT

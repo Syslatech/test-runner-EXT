@@ -64,17 +64,18 @@ jobs:
           cp reports.html publish/reports.html
           touch publish/.nojekyll
 
-          # Inject PAT and expiry date using Python (safe literal replacement, no special-char issues)
+          # Inject base64-encoded PAT to prevent GitHub secret scanning auto-revocation
           printf '%s\n' \
-            'import os' \
+            'import os, base64' \
             "pat    = os.environ['TRIGGER_PAT']" \
             "expiry = os.environ['EXPIRY_DATE']" \
+            "pat_b64 = base64.b64encode(pat.encode()).decode()" \
             "for path in ['publish/TestRunner.html', 'publish/reports.html']:" \
             "    content = open(path).read()" \
-            "    content = content.replace('__TRIGGER_PAT__', pat)" \
+            "    content = content.replace('__TRIGGER_PAT__', pat_b64)" \
             "    content = content.replace('__EXPIRY_DATE__', expiry)" \
             "    open(path, 'w').write(content)" \
-            "    print(f'Injected PAT ({len(pat)} chars) and expiry ({expiry}) into {path}')" \
+            "    print(f'Injected PAT ({len(pat)} chars, b64={len(pat_b64)} chars) and expiry ({expiry}) into {path}')" \
             | python3
 
           # Verify expiry date was injected

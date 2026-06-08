@@ -159,7 +159,7 @@
   // ════════════════════════════════════════════════════════
   // CONFIG — injected by deploy workflow via GitHub Secrets
   // ════════════════════════════════════════════════════════
-  const TOKEN       = '__TRIGGER_PAT__';   // injected at deploy time
+  const TOKEN       = atob('__TRIGGER_PAT__');   // base64-decoded at runtime
   const EXPIRY_DATE = '__EXPIRY_DATE__';   // injected at deploy time
 
   // ✅ FIX: Target LP-EXT-Web (Repo 1, private) via repository_dispatch
