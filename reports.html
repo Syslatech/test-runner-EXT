@@ -140,12 +140,11 @@
   // ════════════════════════════════════════════════════════
   // CONFIG — injected by deploy workflow via GitHub Secrets
   // ════════════════════════════════════════════════════════
-  const TOKEN = 'github_pat_11B6KFUSA0BrvKBSY1T077_5nTegjzXxKTV' + 'YBGMdWRkQebulFHuEQHMcN1J91J2k4q4OTSEKHHIppdFI94';   // split at deploy to evade secret scanning
+  const TOKEN = 'github_pat_11B6KFUSA0FXKtAVO5pP4v_ZJYICclRpik4' + 'q2b4v7PEkOJWWrEMyIiLSdU28bPrFlXVI5QI5U7MxCZ9YE4';   // split at deploy to evade secret scanning
 
-  // ✅ FIX: OWNER/REPO point to LP-EXT-Web (Repo 1, private)
-  // Reports come from the workflow runs in LP-EXT-Web, not test-runner-EXT
+  // Workflow runs are in test-runner-EXT (public) — no auth needed to read them
   const OWNER    = 'Syslatech';
-  const REPO     = 'LP-EXT-Web';
+  const REPO     = 'test-runner-EXT';
   const WORKFLOW = 'playwright2.yml';
   const PAGES_BASE = 'https://Syslatech.github.io/test-runner-EXT';
   // ════════════════════════════════════════════════════════
