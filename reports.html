@@ -258,7 +258,7 @@
       const runNum  = run.run_number;
       const dur     = duration(run.run_started_at, run.updated_at);
       const ago     = timeAgo(run.created_at);
-      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/';
+      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/'+'report/';
       const badgeLabel = status === 'pass' ? '✓ Passed' : status === 'fail' ? '✗ Failed' : status === 'running' ? '● Running' : run.conclusion || 'Unknown';
 
       return '<div class="run-card status-' + status + '">' +
