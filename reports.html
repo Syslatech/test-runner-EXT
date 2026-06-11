@@ -93,7 +93,7 @@
         </svg>
         Refresh
       </button>
-      <a class="btn-trigger" href="TestRunner.html">
+      <a class="btn-trigger" href="index.html">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         New run
       </a>
@@ -237,7 +237,7 @@
       const runNum    = run.run_number;
       const dur       = duration(run.run_started_at, run.updated_at);
       const ago       = timeAgo(run.created_at);
-      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/report/';
+      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/';
       const badgeLabel = status === 'pass' ? '✓ Passed' : status === 'fail' ? '✗ Failed' : status === 'running' ? '● Running' : run.conclusion || 'Unknown';
       const suiteBadge = suite ? '<span class="badge-suite">' + suite + '</span>' : '';
 
