@@ -112,7 +112,6 @@
       <div class="stat-lbl">Pass rate</div>
       <div class="pass-bar-wrap"><div class="pass-bar" id="pass-bar" style="width:0%"></div></div>
     </div>
-    <div class="stat"><div class="stat-num" id="stat-branch">—</div><div class="stat-lbl">Branches</div></div>
   </div>
 
   <div class="filters">
@@ -120,9 +119,6 @@
     <button class="filter-btn" onclick="setFilter('pass', this)">✓ Passed</button>
     <button class="filter-btn" onclick="setFilter('fail', this)">✗ Failed</button>
     <button class="filter-btn" onclick="setFilter('running', this)">● Running</button>
-    <select class="branch-filter" id="branch-filter" onchange="renderRuns()">
-      <option value="">All branches</option>
-    </select>
   </div>
 
   <div id="run-list" class="runs">
@@ -181,11 +177,11 @@
   }
 
   function getBranch(run) {
-    return run.inputs?.branch || run.head_branch || 'master';
+    return (run.inputs && run.inputs.branch) || run.head_branch || 'master';
   }
 
   function getSuite(run) {
-    return run.inputs?.test_suite || 'all';
+    return (run.inputs && run.inputs.test_suite) || null;
   }
 
   async function loadRuns(manual) {
@@ -202,7 +198,6 @@
       allRuns = data.workflow_runs || [];
       renderRuns();
       updateStats();
-      updateBranchFilter();
       document.getElementById('page-subtitle').textContent =
         allRuns.length + ' run' + (allRuns.length !== 1 ? 's' : '') +
         ' · Last refreshed ' + new Date().toLocaleTimeString();
@@ -222,25 +217,9 @@
     renderRuns();
   }
 
-  function updateBranchFilter() {
-    const sel = document.getElementById('branch-filter');
-    const current = sel.value;
-    const branches = [...new Set(allRuns.map(getBranch))];
-    sel.innerHTML = '<option value="">All branches</option>';
-    branches.forEach(function(b) {
-      const opt = document.createElement('option');
-      opt.value = b; opt.textContent = b;
-      if (b === current) opt.selected = true;
-      sel.appendChild(opt);
-    });
-  }
-
   function renderRuns() {
-    const branchFilter = document.getElementById('branch-filter').value;
     const filtered = allRuns.filter(function(run) {
       const s = getStatus(run);
-      const b = getBranch(run);
-      if (branchFilter && b !== branchFilter) return false;
       if (currentFilter === 'all') return true;
       return s === currentFilter;
     });
@@ -252,21 +231,22 @@
     }
 
     const html = filtered.map(function(run) {
-      const status  = getStatus(run);
-      const suite   = getSuite(run);
-      const branch  = getBranch(run);
-      const runNum  = run.run_number;
-      const dur     = duration(run.run_started_at, run.updated_at);
-      const ago     = timeAgo(run.created_at);
-      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/'+'report/';
+      const status    = getStatus(run);
+      const suite     = getSuite(run);
+      const branch    = getBranch(run);
+      const runNum    = run.run_number;
+      const dur       = duration(run.run_started_at, run.updated_at);
+      const ago       = timeAgo(run.created_at);
+      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/report/';
       const badgeLabel = status === 'pass' ? '✓ Passed' : status === 'fail' ? '✗ Failed' : status === 'running' ? '● Running' : run.conclusion || 'Unknown';
+      const suiteBadge = suite ? '<span class="badge-suite">' + suite + '</span>' : '';
 
       return '<div class="run-card status-' + status + '">' +
         '<div class="run-meta">' +
           '<div class="run-title">' +
             '<span>#' + runNum + '</span>' +
             '<span class="run-badge badge-' + status + '">' + badgeLabel + '</span>' +
-            '<span class="badge-suite">' + suite + '</span>' +
+            suiteBadge +
           '</div>' +
           '<div class="run-details">' +
             '<span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>' + branch + '</span>' +
@@ -276,7 +256,6 @@
         '</div>' +
         '<div class="run-actions">' +
           '<a class="btn-view" href="' + reportUrl + '" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Report</a>' +
-          '<a class="btn-gh" href="' + run.html_url + '" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>Actions</a>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -290,13 +269,11 @@
     const fail   = allRuns.filter(function(r) { return r.conclusion === 'failure' || r.conclusion === 'timed_out'; }).length;
     const completed = allRuns.filter(function(r) { return r.status === 'completed'; }).length;
     const rate   = completed > 0 ? Math.round((pass / completed) * 100) : 0;
-    const branches = new Set(allRuns.map(getBranch)).size;
     document.getElementById('stat-total').textContent  = total;
     document.getElementById('stat-pass').textContent   = pass;
     document.getElementById('stat-fail').textContent   = fail;
     document.getElementById('stat-rate').textContent   = rate + '%';
     document.getElementById('pass-bar').style.width    = rate + '%';
-    document.getElementById('stat-branch').textContent = branches;
   }
 
   loadRuns();

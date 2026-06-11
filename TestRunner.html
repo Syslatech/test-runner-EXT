@@ -104,7 +104,7 @@
   <div class="card">
     <div class="row">
       <label for="branch">Branch (LP-EXT-Web)</label>
-      <input type="text" id="branch" value="master" placeholder="master, develop, feature/xyz"/>
+      <input type="text" id="branch" value="master" readonly/>
     </div>
     <div class="row">
       <label for="suite">Test suite</label>
@@ -112,7 +112,7 @@
         <option value="all">All — Full regression</option>
         <option value="loan-pricer">Loan Pricer</option>
         <option value="quick-pricer">Quick Pricer</option>
-        <option value="unassigned">Unassigned</option>
+        <!-- <option value="unassigned">Unassigned</option> -->
       </select>
     </div>
     <div class="row">
@@ -122,7 +122,7 @@
           <div class="label-sub">1 retry per failed test when enabled</div>
         </div>
         <label class="toggle">
-          <input type="checkbox" id="retries" checked/>
+          <input type="checkbox" id="retries"/>
           <span class="slider"></span>
         </label>
       </div>
@@ -130,12 +130,16 @@
     <div class="divider"></div>
     <div class="row">
       <label for="grep">TC filter</label>
-      <input type="text" id="grep" placeholder="REG_TS01_TC01  or  REG_TS01_TC01|REG_TS01_TC05  or  smoke"/>
-      <p class="hint">Single: REG_TS01_TC01 · Multiple: REG_TS01_TC01|REG_TS01_TC05|REG_TS01_TC12 · Keyword: smoke</p>
+      <input type="text" id="grep" placeholder="REG_TS01_TC01  or  REG_TS01_TC01|REG_TS01_TC05  "/>
+      <p class="hint">Single: REG_TS01_TC01 · Multiple: REG_TS01_TC01|REG_TS01_TC05|REG_TS01_TC12 · </p>
     </div>
     <div class="row">
-      <label for="spec">Specific spec file</label>
-      <input type="text" id="spec" placeholder="tests/ext-web/quickpricer"/>
+      <label for="spec">Specific folder path</label>
+      <select id="spec">
+        <option value="">None — use test suite above</option>
+        <option value="tests/ext-web/quickpricer/quick-pricer-module">tests/ext-web/quickpricer/quick-pricer-module</option>
+        <option value="tests/ext-web/loanpricer/">tests/ext-web/loanpricer/</option>
+      </select>
     </div>
   </div>
 
@@ -199,6 +203,8 @@
     corner.innerHTML = '<div class="token-corner-dot ' + dotCls + '"></div>' + label;
   }
 
+  let _pollCount = 0;
+
   async function triggerWorkflow() {
     if (!TOKEN || TOKEN.length < 30) {
       setStatus('error', 'Configuration error', 'Token not injected. Re-deploy the site or contact admin.');
@@ -210,7 +216,7 @@
     const grep    = document.getElementById('grep').value.trim();
     const spec    = document.getElementById('spec').value.trim();
 
-    setStatus('loading', 'Dispatching to LP-EXT-Web…', 'Branch: ' + branch + ' · Suite: ' + suite + ' · Retries: ' + retries);
+    setStatus('loading', 'Dispatching…', 'Branch: ' + branch + ' · Suite: ' + suite + ' · Retries: ' + retries);
     document.getElementById('run-btn').disabled = true;
 
     try {
@@ -226,31 +232,57 @@
           },
           body: JSON.stringify({
             ref: 'master',
-            inputs: {
-              branch:     branch,
-              test_suite: suite,
-              retries:    retries,
-              grep:       grep,
-              spec:       spec
-            }
+            inputs: { branch: branch, test_suite: suite, retries: retries, grep: grep, spec: spec }
           })
         }
       );
 
       if (res.status === 204) {
-        const actionsUrl = 'https://github.com/Syslatech/test-runner-EXT/actions';
-        setStatus('success', '✅ Tests triggered successfully!',
-          '<a href="' + actionsUrl + '" target="_blank">Watch run on GitHub Actions →</a>&nbsp;&nbsp;<a href="reports.html">View reports →</a>');
+        _pollCount = 0;
+        setStatus('loading', 'Triggered — locating run…', 'Branch: ' + branch + ' · Suite: ' + suite);
+        setTimeout(pollRunStatus, 4000);
       } else {
         const err = await res.json().catch(function() { return {}; });
         setStatus('error', 'GitHub returned ' + res.status,
-          err.message || 'Token may lack repo dispatch permission on LP-EXT-Web. Check PAT scope.');
+          err.message || 'Check PAT permissions (Actions: write on test-runner-EXT).');
+        document.getElementById('run-btn').disabled = false;
       }
     } catch (e) {
       setStatus('error', 'Network error', e.message);
-    } finally {
       document.getElementById('run-btn').disabled = false;
     }
+  }
+
+  async function pollRunStatus() {
+    try {
+      const res = await fetch(
+        'https://api.github.com/repos/' + OWNER + '/' + REPO +
+        '/actions/workflows/' + WORKFLOW + '/runs?per_page=1',
+        { headers: { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const run  = data.workflow_runs && data.workflow_runs[0];
+      if (!run) return;
+
+      const num  = run.run_number;
+      const link = '&nbsp;&nbsp;<a href="reports.html">View Reports →</a>';
+
+      if (run.status === 'queued') {
+        setStatus('loading', 'Run #' + num + ' — Queued', 'Waiting for a runner to pick up the job…' + link);
+        if (++_pollCount < 30) { setTimeout(pollRunStatus, 5000); return; }
+      } else if (run.status === 'in_progress') {
+        setStatus('loading', 'Run #' + num + ' — In Progress', 'Tests are running…' + link);
+        if (++_pollCount < 60) { setTimeout(pollRunStatus, 10000); return; }
+      } else if (run.status === 'completed') {
+        if (run.conclusion === 'success') {
+          setStatus('success', 'Run #' + num + ' — Passed ✅', link.trim());
+        } else {
+          setStatus('error', 'Run #' + num + ' — ' + (run.conclusion || 'Unknown'), link.trim());
+        }
+      }
+      document.getElementById('run-btn').disabled = false;
+    } catch (e) { /* silently ignore transient poll errors */ }
   }
 
   function setStatus(type, title, detail) {
