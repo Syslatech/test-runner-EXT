@@ -63,6 +63,7 @@
     .run-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
     .btn-view { display: flex; align-items: center; gap: 6px; padding: .5rem .9rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: inherit; font-size: .75rem; font-weight: 700; text-decoration: none; transition: all .15s; letter-spacing: .04em; text-transform: uppercase; }
     .btn-view:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-view.disabled { opacity: .35; pointer-events: none; cursor: not-allowed; }
     .btn-view svg { width: 13px; height: 13px; }
     .btn-gh { display: flex; align-items: center; gap: 5px; padding: .35rem .75rem; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font-family: inherit; font-size: .7rem; font-weight: 700; text-decoration: none; transition: all .15s; text-transform: uppercase; letter-spacing: .04em; }
     .btn-gh:hover { border-color: var(--border-hover); color: var(--text); }
@@ -255,7 +256,7 @@
           '</div>' +
         '</div>' +
         '<div class="run-actions">' +
-          '<a class="btn-view" href="' + reportUrl + '" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Report</a>' +
+          '<a class="btn-view' + (status === 'running' ? ' disabled' : '') + '" href="' + reportUrl + '" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Report</a>' +
         '</div>' +
       '</div>';
     }).join('');
