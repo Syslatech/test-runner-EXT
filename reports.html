@@ -63,6 +63,7 @@
     .run-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
     .btn-view { display: flex; align-items: center; gap: 6px; padding: .5rem .9rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: inherit; font-size: .75rem; font-weight: 700; text-decoration: none; transition: all .15s; letter-spacing: .04em; text-transform: uppercase; }
     .btn-view:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-view.disabled { opacity: .35; pointer-events: none; cursor: not-allowed; }
     .btn-view svg { width: 13px; height: 13px; }
     .btn-gh { display: flex; align-items: center; gap: 5px; padding: .35rem .75rem; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font-family: inherit; font-size: .7rem; font-weight: 700; text-decoration: none; transition: all .15s; text-transform: uppercase; letter-spacing: .04em; }
     .btn-gh:hover { border-color: var(--border-hover); color: var(--text); }
@@ -93,7 +94,7 @@
         </svg>
         Refresh
       </button>
-      <a class="btn-trigger" href="index.html">
+      <a class="btn-trigger" href="TestRunner.html">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         New run
       </a>
@@ -140,7 +141,7 @@
 
   // Workflow runs are in test-runner-EXT (public) — no auth needed to read them
   const OWNER    = 'Syslatech';
-  const REPO     = 'LP-EXT-Web';
+  const REPO     = 'test-runner-EXT';
   const WORKFLOW = 'playwright2.yml';
   const PAGES_BASE = 'https://Syslatech.github.io/test-runner-EXT';
   // ════════════════════════════════════════════════════════
@@ -237,7 +238,7 @@
       const runNum    = run.run_number;
       const dur       = duration(run.run_started_at, run.updated_at);
       const ago       = timeAgo(run.created_at);
-      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/';
+      const reportUrl = PAGES_BASE + '/reports/' + runNum + '/report/';
       const badgeLabel = status === 'pass' ? '✓ Passed' : status === 'fail' ? '✗ Failed' : status === 'running' ? '● Running' : run.conclusion || 'Unknown';
       const suiteBadge = suite ? '<span class="badge-suite">' + suite + '</span>' : '';
 
@@ -255,7 +256,7 @@
           '</div>' +
         '</div>' +
         '<div class="run-actions">' +
-          (status !== 'running' ? '<a class="btn-view" href="' + reportUrl + '" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Report</a>' : '') +
+          '<a class="btn-view' + (status === 'running' ? ' disabled' : '') + '" href="' + reportUrl + '" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Report</a>' +
         '</div>' +
       '</div>';
     }).join('');
