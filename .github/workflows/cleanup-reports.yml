@@ -1,0 +1,84 @@
+# ============================================================
+# Cleanup Old Reports — runs every 5 days
+# Checks out gh-pages, removes reports/ folders older than
+# 5 days (by git commit date), then pushes the cleanup commit.
+# ============================================================
+
+name: Cleanup Old Reports -5 days
+
+on:
+  schedule:
+    - cron: '0 2 */5 * *'   # 02:00 UTC on days 1, 6, 11, 16, 21, 26
+  workflow_dispatch:          # allow manual trigger anytime
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+
+      # ── 1. Full checkout of gh-pages (need history for git log dates) ───────
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      # ── 2. Delete any reports/ subfolder committed more than 5 days ago ─────
+      - name: Delete reports older than 5 days
+        id: cleanup
+        run: |
+          DELETED=0
+          KEPT=0
+          CUTOFF=$(date -d '5 days ago' +%s)
+
+          for dir in reports/*/; do
+            [ -d "$dir" ] || continue
+
+            # Find the oldest commit that touched this folder (= creation date)
+            CREATED=$(git log --format="%ai" -- "$dir" | tail -1)
+            [ -z "$CREATED" ] && echo "⚠️  No git history for $dir — skipping" && continue
+
+            CREATED_TS=$(date -d "$CREATED" +%s 2>/dev/null) || continue
+
+            if [ "$CREATED_TS" -lt "$CUTOFF" ]; then
+              echo "🗑️  Deleting  $dir  (created: $CREATED)"
+              rm -rf "$dir"
+              DELETED=$((DELETED + 1))
+            else
+              echo "✅  Keeping   $dir  (created: $CREATED)"
+              KEPT=$((KEPT + 1))
+            fi
+          done
+
+          echo "deleted=$DELETED" >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "────────────────────────────────"
+          echo "  Deleted : $DELETED report(s)"
+          echo "  Kept    : $KEPT report(s)"
+          echo "────────────────────────────────"
+
+      # ── 3. Commit and push only if something was removed ────────────────────
+      - name: Commit cleanup
+        if: steps.cleanup.outputs.deleted != '0'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: auto-cleanup reports older than 5 days [$(date +%Y-%m-%d)]"
+          git push
+
+      # ── 4. Summary ───────────────────────────────────────────────────────────
+      - name: Post summary
+        if: always()
+        run: |
+          DELETED="${{ steps.cleanup.outputs.deleted }}"
+          echo "## Report Cleanup $( [ "$DELETED" = "0" ] && echo '— Nothing to remove' || echo "✅" )" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Reports deleted | \`${DELETED:-0}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Retention policy | 5 days |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run date | $(date +%Y-%m-%d) |" >> "$GITHUB_STEP_SUMMARY"
