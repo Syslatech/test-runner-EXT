@@ -196,7 +196,10 @@
       );
       if (!res.ok) throw new Error('GitHub API ' + res.status);
       const data = await res.json();
-      allRuns = data.workflow_runs || [];
+      const cutoff = Date.now() - 5 * 24 * 60 * 60 * 1000;
+      allRuns = (data.workflow_runs || []).filter(function(r) {
+        return new Date(r.created_at).getTime() >= cutoff;
+      });
       renderRuns();
       updateStats();
       document.getElementById('page-subtitle').textContent =
