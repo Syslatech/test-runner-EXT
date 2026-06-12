@@ -31,10 +31,12 @@ jobs:
         env:
           TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
         run: |
-          TOKEN_INFO=$(curl -s -I \
+          # GET /user with header dump — GitHub returns the expiration header
+          # only on authenticated GET requests; HEAD on public endpoints skips it
+          TOKEN_INFO=$(curl -s -D - -o /dev/null \
             -H "Authorization: Bearer $TRIGGER_PAT" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/users/octocat" 2>/dev/null | \
+            "https://api.github.com/user" 2>/dev/null | \
             grep -i "github-authentication-token-expiration" | \
             sed 's/.*: //' | tr -d '\r')
 
