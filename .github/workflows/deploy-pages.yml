@@ -30,20 +30,28 @@ jobs:
         id: expiry
         env:
           TRIGGER_PAT: ${{ secrets.TRIGGER_PAT }}
+          PAT_EXPIRY: ${{ secrets.PAT_EXPIRY }}
         run: |
-          # GET /user with header dump — GitHub returns the expiration header
-          # only on authenticated GET requests; HEAD on public endpoints skips it
-          TOKEN_INFO=$(curl -s -D - -o /dev/null \
-            -H "Authorization: Bearer $TRIGGER_PAT" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/user" 2>/dev/null | \
-            grep -i "github-authentication-token-expiration" | \
-            sed 's/.*: //' | tr -d '\r')
-
-          if [ -n "$TOKEN_INFO" ]; then
-            EXPIRY_DATE=$(echo "$TOKEN_INFO" | cut -d' ' -f1)
+          # Primary: use PAT_EXPIRY secret if set (most reliable — set manually when rotating PAT)
+          if [ -n "$PAT_EXPIRY" ]; then
+            EXPIRY_DATE="$PAT_EXPIRY"
+            echo "Using PAT_EXPIRY secret: $EXPIRY_DATE"
           else
-            EXPIRY_DATE=$(date -d "+90 days" +%Y-%m-%d 2>/dev/null || date -v+90d +%Y-%m-%d)
+            # Fallback: attempt to detect from GitHub API response headers
+            TOKEN_INFO=$(curl -s -D - -o /dev/null \
+              -H "Authorization: Bearer $TRIGGER_PAT" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/user" 2>/dev/null | \
+              grep -i "github-authentication-token-expiration" | \
+              sed 's/.*: //' | tr -d '\r')
+
+            if [ -n "$TOKEN_INFO" ]; then
+              EXPIRY_DATE=$(echo "$TOKEN_INFO" | cut -d' ' -f1)
+              echo "Detected expiry from API: $EXPIRY_DATE"
+            else
+              EXPIRY_DATE=$(date -d "+90 days" +%Y-%m-%d 2>/dev/null || date -v+90d +%Y-%m-%d)
+              echo "⚠️ Could not detect expiry — used +90 day fallback: $EXPIRY_DATE"
+            fi
           fi
 
           echo "expiry_date=$EXPIRY_DATE" >> "$GITHUB_OUTPUT"
